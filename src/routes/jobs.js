@@ -1,4 +1,3 @@
-// routes/jobs.js
 import express from "express";
 import JobPost from "../models/JobPost.js";
 import authMiddleware from "../middlewares/auth.js";
@@ -55,8 +54,7 @@ router.post("/apply/:jobId", authMiddleware, async (req, res) => {
 
     const { jobId } = req.params;
 
-    // Later you can save applications in a JobApplication model
-    // For now just confirm success
+    // Temporary response until JobApplication model is implemented
     return res.json({ message: `Application submitted for job ${jobId}` });
   } catch (err) {
     console.error(err);
