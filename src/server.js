@@ -10,6 +10,9 @@ import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import candidateRoutes from "./routes/candidateRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
+import jobRoutes from "./routes/jobs.js";
+
+
 
 // Admin setup
 import createAdmin from "./config/adminSetup.js"; // <-- add this
@@ -34,6 +37,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/candidate", candidateRoutes);
 app.use("/api/employer", employerRoutes);
+app.use("/api/jobs", jobRoutes);
 
 // Default route for testing
 app.get("/", (req, res) => {
