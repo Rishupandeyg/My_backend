@@ -5,9 +5,15 @@ import authMiddleware from "../middlewares/auth.js";
 
 const router = express.Router();
 
-// POST job (Employer)
+// -------------------------------
+// POST job (Employer only)
+// -------------------------------
 router.post("/post", authMiddleware, async (req, res) => {
   try {
+    if (req.user.role !== "employer") {
+      return res.status(403).json({ message: "Only employers can post jobs" });
+    }
+
     const { title, description, location, category } = req.body;
     const job = new JobPost({
       title,
@@ -16,6 +22,7 @@ router.post("/post", authMiddleware, async (req, res) => {
       category,
       postedBy: req.user.id,
     });
+
     await job.save();
     res.status(201).json(job);
   } catch (err) {
@@ -24,7 +31,9 @@ router.post("/post", authMiddleware, async (req, res) => {
   }
 });
 
-// GET all jobs (Candidate)
+// -------------------------------
+// GET all jobs (Public - everyone)
+// -------------------------------
 router.get("/all", async (req, res) => {
   try {
     const jobs = await JobPost.find().sort({ createdAt: -1 });
@@ -32,6 +41,26 @@ router.get("/all", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch jobs" });
+  }
+});
+
+// -------------------------------
+// Apply for a job (Candidate only)
+// -------------------------------
+router.post("/apply/:jobId", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "candidate") {
+      return res.status(403).json({ message: "Only candidates can apply for jobs" });
+    }
+
+    const { jobId } = req.params;
+
+    // Later you can save applications in a JobApplication model
+    // For now just confirm success
+    return res.json({ message: `Application submitted for job ${jobId}` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to apply for job" });
   }
 });
 
