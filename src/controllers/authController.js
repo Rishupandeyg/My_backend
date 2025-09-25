@@ -80,23 +80,23 @@ exports.login = async (req, res, next) => {
 };
 
 // Request Login OTP
-exports.requestLoginOTP = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ msg: "User not found" });
+// exports.requestLoginOTP = async (req, res, next) => {
+//   try {
+//     const { email } = req.body;
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(400).json({ msg: "User not found" });
 
-    const otp = generateOTP();
-    user.otp = otp;
-    user.otpExpiry = Date.now() + 10 * 60 * 1000;
-    await user.save();
+//     const otp = generateOTP();
+//     user.otp = otp;
+//     user.otpExpiry = Date.now() + 10 * 60 * 1000;
+//     await user.save();
 
-    await sendEmailOTP(email, otp);
-    res.json({ msg: "OTP sent for login" });
-  } catch (err) {
-    next(err);
-  }
-};
+//     await sendEmailOTP(email, otp);
+//     res.json({ msg: "OTP sent for login" });
+//   } catch (err) {
+//     next(err);
+//   }
+// };
 
 // Login with OTP
 // exports.loginWithOTP = async (req, res, next) => {
