@@ -5,7 +5,9 @@ import JobPost from "../models/JobPost.js";
 
 const router = express.Router();
 
+// -------------------------------
 // Candidate applies for a job
+// -------------------------------
 router.post("/apply/:jobId", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "candidate") {
@@ -14,66 +16,83 @@ router.post("/apply/:jobId", authMiddleware, async (req, res) => {
 
     const { jobId } = req.params;
 
-    // Check job exists
+    // Validate Job ID
+    if (!jobId || !jobId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid Job ID" });
+    }
+
+    // Check if job exists
     const job = await JobPost.findById(jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
 
-    // Check already applied
-    const existing = await Application.findOne({ jobId, user: req.user.id });
-    if (existing)
+    // Check if already applied
+    const existingApp = await Application.findOne({ job: jobId, user: req.user.id });
+    if (existingApp) {
       return res.status(400).json({ message: "You already applied for this job" });
+    }
 
     // Save application
-    const application = new Application({ jobId, user: req.user.id });
+    const application = new Application({ job: jobId, user: req.user.id });
     await application.save();
 
     res.json({ message: "Application submitted successfully", application });
   } catch (err) {
-    console.error(err);
+    console.error("Apply Error:", err);
     res.status(500).json({ message: "Failed to apply", error: err.message });
   }
 });
 
-// Get candidate's own applications
+// -------------------------------
+// Candidate fetches their applications
+// -------------------------------
 router.get("/my-applications", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "candidate") {
       return res.status(403).json({ message: "Only candidates can view applications" });
     }
 
-    const apps = await Application.find({ user: req.user.id })
-      .populate("jobId", "title companyName location category")
+    const applications = await Application.find({ user: req.user.id })
+      .populate("job", "title companyName location category")
       .sort({ createdAt: -1 });
 
-    res.json(apps);
+    res.json(applications);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to fetch applications" });
+    console.error("Fetch Applications Error:", err);
+    res.status(500).json({ message: "Failed to fetch applications", error: err.message });
   }
 });
 
-// Get all applicants for a job (Employer/Admin)
+// -------------------------------
+// Employer/Admin fetches applicants for a job
+// -------------------------------
 router.get("/job/:jobId", authMiddleware, async (req, res) => {
   try {
     const { jobId } = req.params;
+
+    if (!jobId || !jobId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid Job ID" });
+    }
+
     const job = await JobPost.findById(jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
 
+    // Only employer who posted the job or admin can view applicants
     if (req.user.role === "employer" && job.postedBy.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized" });
     }
+
     if (req.user.role !== "employer" && req.user.role !== "admin") {
       return res.status(403).json({ message: "Only employers/admins can view applicants" });
     }
 
-    const apps = await Application.find({ jobId })
+    const applicants = await Application.find({ job: jobId })
       .populate("user", "firstName lastName email")
       .sort({ createdAt: -1 });
 
-    res.json(apps);
+    res.json(applicants);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to fetch applicants" });
+    console.error("Fetch Applicants Error:", err);
+    res.status(500).json({ message: "Failed to fetch applicants", error: err.message });
   }
 });
 
