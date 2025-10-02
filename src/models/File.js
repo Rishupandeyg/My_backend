@@ -15,4 +15,4 @@ const fileUploadSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("File", fileSchema);
+export default mongoose.model("File", FileSchema);
