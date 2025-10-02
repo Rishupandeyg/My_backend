@@ -2,16 +2,23 @@ import express from "express";
 import authMiddleware from "../middlewares/auth.js";
 import Application from "../models/Application.js";
 import JobPost from "../models/JobPost.js";
+import Candidate from "../models/Candidate.js"; // ✅ import Candidate
 
 const router = express.Router();
 
 // -------------------------------
-// Candidate applies for a job
+// Candidate applies for a job (Only paid candidates)
 // -------------------------------
 router.post("/apply/:jobId", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "candidate") {
       return res.status(403).json({ message: "Only candidates can apply" });
+    }
+
+    // ✅ Check if candidate has paid
+    const candidate = await Candidate.findById(req.user.id);
+    if (!candidate.isPaid) {
+      return res.status(403).json({ message: "Please complete payment to apply" });
     }
 
     const { jobId } = req.params;

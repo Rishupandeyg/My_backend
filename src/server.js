@@ -30,8 +30,17 @@ app.use(express.json());
 
 // Serve uploaded files
 //app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+const fileupload = require("express-fileupload");
+app.use(fileupload());
 
+//  connect to cloud
+const cloudinary = require("./config/cloudinary");
+cloudinary.cloudinaryConnect();
+
+// api route 
+const Upload = require("./routes/fileUpload");
+app.use('/api/v1/upload', Upload);
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
