@@ -12,20 +12,20 @@ import candidateRoutes from "./routes/candidateRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobs.js";
 import applicationRoutes from "./routes/applicationRoutes.js";
-import UploadRoute from "./routes/fileUpload.js"; // updated import
+import UploadRoute from "./routes/fileUpload.js";
 
 // Admin setup
-import createAdmin from "./config/adminSetup.js"; // <-- add this
+import createAdmin from "./config/adminSetup.js";
 
 // file upload middleware
 import fileUpload from "express-fileupload";
 
 // Cloudinary
 import { cloudinaryConnect } from "./config/cloudinary.js";
-cloudinaryConnect();
 
-
+// Initialize dotenv
 dotenv.config();
+
 const app = express();
 
 // For __dirname (since we are using ES modules)
@@ -35,10 +35,10 @@ const __dirname = path.dirname(__filename);
 // Middleware
 app.use(cors({ origin: "*" }));
 app.use(express.json());
-app.use(fileUpload()); // express-fileupload
+app.use(fileUpload());
 
-// connect to cloud
-cloudinary.cloudinaryConnect();
+// Connect Cloudinary
+cloudinaryConnect(); // ✅ only once
 
 // API route
 app.use("/api/v1/upload", UploadRoute);
