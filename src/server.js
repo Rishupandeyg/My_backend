@@ -41,7 +41,13 @@ app.use(fileUpload());
 cloudinaryConnect(); // ✅ only once
 
 // API route
-app.use("/api/v1/upload", UploadRoute);
+app.use(
+  fileUpload({
+    useTempFiles: true,
+    tempFileDir: "/tmp/", // ✅ safe location for temp uploads
+  })
+);
+
 
 // Routes
 app.use("/api/auth", authRoutes);

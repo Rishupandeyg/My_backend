@@ -1,16 +1,10 @@
 import cloudinary from "cloudinary";
 import FileUpload from "../models/File.js";
-
-// User models
 import Candidate from "../models/Candidate.js";
 import Employer from "../models/Employer.js";
 import Admin from "../models/Admin.js";
 
-const UserModels = {
-  Candidate,
-  Employer,
-  Admin,
-};
+const UserModels = { Candidate, Employer, Admin };
 
 // Cloudinary config
 cloudinary.v2.config({
@@ -19,57 +13,44 @@ cloudinary.v2.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ====================
-// Generic File Upload Controller
-// ====================
 export const uploadFile = async (req, res) => {
   try {
-    const { userType, fileType } = req.params; // e.g., "Candidate", "Employer", "Admin" & "photo","resume","audio","video"
+    const { userType, fileType } = req.params;
+    const User = UserModels[userType];
 
     console.log("User type:", userType);
     console.log("File type:", fileType);
     console.log("Files received:", req.files);
-    console.log("User ID from req.user:", req.user?.id);
+    console.log("User ID:", req.user?.id);
 
-    const User = UserModels[userType];
     if (!User) return res.status(400).json({ error: "Invalid user type" });
-
-    if (!req.files || !req.files.file)
-      return res.status(400).json({ error: "No file uploaded" });
-
-    if (!req.user?.id)
-      return res.status(401).json({ error: "Unauthorized: User not found" });
+    if (!req.files || !req.files.file) return res.status(400).json({ error: "No file uploaded" });
+    if (!req.user?.id) return res.status(401).json({ error: "Unauthorized: User not found" });
 
     const file = req.files.file;
 
     // Determine Cloudinary resource type
     let resourceType = "auto";
     if (fileType === "resume") resourceType = "raw";
-    if (fileType === "audio") resourceType = "video"; // Cloudinary treats audio as video
+    if (fileType === "audio" || fileType === "video") resourceType = "video"; // Cloudinary treats audio as video
 
     // Upload to Cloudinary
     const result = await cloudinary.v2.uploader.upload(file.tempFilePath, {
-      folder: `${userType}s`, // e.g., "Candidates", "Employers", "Admins"
+      folder: `${userType}s`,
       resource_type: resourceType,
     });
 
-    // Update user's own field
+    // Update user model
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const fieldMap = {
-      photo: "photoUrl",
-      resume: "resumeUrl",
-      audio: "audioUrl",
-      video: "videoUrl",
-    };
-
+    const fieldMap = { photo: "photoUrl", resume: "resumeUrl", audio: "audioUrl", video: "videoUrl" };
     if (fieldMap[fileType]) {
       user[fieldMap[fileType]] = result.secure_url;
       await user.save();
     }
 
-    // Save record in FileUpload model
+    // Save file record
     const fileRecord = await FileUpload.create({
       userId: req.user.id,
       userType,
@@ -81,7 +62,7 @@ export const uploadFile = async (req, res) => {
       size: file.size,
     });
 
-    res.json({ message: `${fileType} uploaded successfully`, file: fileRecord });
+    res.json({ message: `${fileType} uploaded successfully`, file: fileRecord, candidate: user });
   } catch (err) {
     console.error("File upload error:", err);
     res.status(500).json({ error: "File upload failed", details: err.message });
