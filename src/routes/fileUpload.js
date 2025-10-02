@@ -1,13 +1,16 @@
+// routes/fileUpload.js
 import express from "express";
+import { uploadFile } from "../controllers/FileUpload.js";
+import authMiddleware from "../middlewares/auth.js";
+
 const router = express.Router();
 
-// ✅ ES module import
-import { imageUpload, videoUpload, audioUpload, localFileUpload } from "../controllers/FileUpload.js";
-
-// api routes
-router.post("/imageUpload", imageUpload);
-router.post("/videoUpload", videoUpload);
-router.post("/localFileUpload", localFileUpload);
-router.post("/audioUpload", audioUpload);
+// Generic file upload route
+// Example usage:
+// POST /api/v1/upload/Candidate/photo
+// POST /api/v1/upload/Candidate/resume
+// POST /api/v1/upload/Candidate/audio
+// POST /api/v1/upload/Candidate/video
+router.post("/:userType/:fileType", authMiddleware, uploadFile);
 
 export default router;
