@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const fileUploadSchema = new mongoose.Schema(
+const FileSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, refPath: "userType" },
     userType: { type: String, required: true, enum: ["Candidate", "Employer", "Admin"] },
