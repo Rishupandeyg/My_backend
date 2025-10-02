@@ -25,15 +25,24 @@ cloudinary.v2.config({
 export const uploadFile = async (req, res) => {
   try {
     const { userType, fileType } = req.params; // e.g., "Candidate", "Employer", "Admin" & "photo","resume","audio","video"
+
+    console.log("User type:", userType);
+    console.log("File type:", fileType);
+    console.log("Files received:", req.files);
+    console.log("User ID from req.user:", req.user?.id);
+
     const User = UserModels[userType];
     if (!User) return res.status(400).json({ error: "Invalid user type" });
 
     if (!req.files || !req.files.file)
       return res.status(400).json({ error: "No file uploaded" });
 
+    if (!req.user?.id)
+      return res.status(401).json({ error: "Unauthorized: User not found" });
+
     const file = req.files.file;
 
-    // Cloudinary resource type mapping
+    // Determine Cloudinary resource type
     let resourceType = "auto";
     if (fileType === "resume") resourceType = "raw";
     if (fileType === "audio") resourceType = "video"; // Cloudinary treats audio as video
@@ -44,14 +53,17 @@ export const uploadFile = async (req, res) => {
       resource_type: resourceType,
     });
 
-    // Update user's own field (optional)
+    // Update user's own field
     const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
     const fieldMap = {
       photo: "photoUrl",
       resume: "resumeUrl",
       audio: "audioUrl",
       video: "videoUrl",
     };
+
     if (fieldMap[fileType]) {
       user[fieldMap[fileType]] = result.secure_url;
       await user.save();
@@ -72,6 +84,6 @@ export const uploadFile = async (req, res) => {
     res.json({ message: `${fileType} uploaded successfully`, file: fileRecord });
   } catch (err) {
     console.error("File upload error:", err);
-    res.status(500).json({ error: "File upload failed" });
+    res.status(500).json({ error: "File upload failed", details: err.message });
   }
 };
