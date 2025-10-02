@@ -21,7 +21,9 @@ import createAdmin from "./config/adminSetup.js"; // <-- add this
 import fileUpload from "express-fileupload";
 
 // Cloudinary
-import cloudinary from "./config/cloudinary.js";
+import { cloudinaryConnect } from "./config/cloudinary.js";
+cloudinaryConnect();
+
 
 dotenv.config();
 const app = express();
