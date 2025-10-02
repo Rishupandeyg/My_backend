@@ -12,10 +12,16 @@ import candidateRoutes from "./routes/candidateRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobs.js";
 import applicationRoutes from "./routes/applicationRoutes.js";
-
+import UploadRoute from "./routes/fileUpload.js"; // updated import
 
 // Admin setup
 import createAdmin from "./config/adminSetup.js"; // <-- add this
+
+// file upload middleware
+import fileUpload from "express-fileupload";
+
+// Cloudinary
+import cloudinary from "./config/cloudinary.js";
 
 dotenv.config();
 const app = express();
@@ -27,20 +33,14 @@ const __dirname = path.dirname(__filename);
 // Middleware
 app.use(cors({ origin: "*" }));
 app.use(express.json());
+app.use(fileUpload()); // express-fileupload
 
-// Serve uploaded files
-//app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-// app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-const fileupload = require("express-fileupload");
-app.use(fileupload());
-
-//  connect to cloud
-const cloudinary = require("./config/cloudinary");
+// connect to cloud
 cloudinary.cloudinaryConnect();
 
-// api route 
-const Upload = require("./routes/fileUpload");
-app.use('/api/v1/upload', Upload);
+// API route
+app.use("/api/v1/upload", UploadRoute);
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);

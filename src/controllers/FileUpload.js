@@ -1,10 +1,10 @@
-const cloudinary = require("cloudinary").v2;
-const FileUpload = require("../models/File");
+import cloudinary from "cloudinary";
+import FileUpload from "../models/File.js";
 
 // User models
-const Candidate = require("../models/Candidate");
-const Employer = require("../models/Employer");
-const Admin = require("../models/Admin");
+import Candidate from "../models/Candidate.js";
+import Employer from "../models/Employer.js";
+import Admin from "../models/Admin.js";
 
 const UserModels = {
   Candidate,
@@ -13,7 +13,7 @@ const UserModels = {
 };
 
 // Cloudinary config
-cloudinary.config({
+cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
@@ -22,7 +22,7 @@ cloudinary.config({
 // ====================
 // Generic File Upload Controller
 // ====================
-exports.uploadFile = async (req, res) => {
+export const uploadFile = async (req, res) => {
   try {
     const { userType, fileType } = req.params; // e.g., "Candidate", "Employer", "Admin" & "photo","resume","audio","video"
     const User = UserModels[userType];
@@ -39,7 +39,7 @@ exports.uploadFile = async (req, res) => {
     if (fileType === "audio") resourceType = "video"; // Cloudinary treats audio as video
 
     // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(file.tempFilePath, {
+    const result = await cloudinary.v2.uploader.upload(file.tempFilePath, {
       folder: `${userType}s`, // e.g., "Candidates", "Employers", "Admins"
       resource_type: resourceType,
     });
