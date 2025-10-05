@@ -3,7 +3,6 @@ import Employer from "../models/Employer.js";
 import Candidate from "../models/Candidate.js";
 import authMiddleware from "../middlewares/auth.js";
 
-// 
 // GET employer profile
 router.get("/profile", authMiddleware, async (req, res) => {
   try {
