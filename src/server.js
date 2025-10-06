@@ -62,12 +62,15 @@ app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
 // ----------------- SERVE FRONTEND BUILD -----------------
 // Serve static files from Vite build
 const frontendPath = path.join(__dirname, "../frontend/dist");
+
+// Serve static files
 app.use(express.static(frontendPath));
 
-// Catch-all route for React Router (Express v4 compatible)
-app.get("*", (req, res) => {
+// Catch-all route for React Router
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
+
 
 
 // ----------------- DATABASE & SERVER -----------------
