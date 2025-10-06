@@ -59,16 +59,8 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/v1/upload", uploadRoutes); // ✅ Cloudinary file upload
 
-// ----------------- SERVE FRONTEND BUILD -----------------
-const frontendPath = path.join(__dirname, "../frontend/build");
-
-// Serve static files from the React app
-app.use(express.static(frontendPath));
-
-// Catch-all route — send all non-API requests to React
-app.get("*", (req, res) => {
-  res.sendFile(path.resolve(frontend, "index.html"));
-});
+// Default route
+app.get("/", (req, res) => res.send("🚀 Server is running!"));
 
 // ----------------- DATABASE & SERVER -----------------
 mongoose
@@ -83,6 +75,7 @@ mongoose
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => console.log("❌ MongoDB Error:", err));
+
 
 
 
