@@ -67,7 +67,7 @@ app.use(express.static(frontendPath));
 
 // Catch-all route — send all non-API requests to React
 app.get("*", (req, res) => {
-  res.sendFile(path.resolve(frontendPath, "index.html"));
+  res.sendFile(path.resolve(frontend, "index.html"));
 });
 
 // ----------------- DATABASE & SERVER -----------------
