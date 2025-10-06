@@ -17,9 +17,7 @@ router.get("/candidates", auth, async (req, res) => {
   }
 
   try {
-    const candidates = await Candidate.find().select(
-      "-password"
-    ); // exclude passwords
+    const candidates = await Candidate.find().select("-password"); // exclude passwords
 
     const formattedCandidates = candidates.map((c) => ({
       id: c._id,
@@ -31,16 +29,40 @@ router.get("/candidates", auth, async (req, res) => {
       city: c.city,
       state: c.state,
       isPaid: c.isPaid,
-      photo: c.photoUrl,
-      resume: c.resumeUrl,
-      audio: c.audioUrl,
-      video: c.videoUrl,
-      uploads: c.uploads || [],
+      photo: c.photoUrl,   // Cloudinary URL
+      resume: c.resumeUrl, // Cloudinary URL
+      audio: c.audioUrl,   // Cloudinary URL
+      video: c.videoUrl,   // Cloudinary URL
+      uploads: c.uploads || [], // other uploaded files
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     }));
 
     res.json(formattedCandidates);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Get a specific candidate's uploads (admin only)
+router.get("/candidate/:id/uploads", auth, async (req, res) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ msg: "Access denied: Admins only" });
+  }
+
+  try {
+    const candidate = await Candidate.findById(req.params.id).select(
+      "photoUrl resumeUrl videoUrl audioUrl uploads"
+    );
+    if (!candidate) return res.status(404).json({ msg: "Candidate not found" });
+
+    res.json({
+      photo: candidate.photoUrl,
+      resume: candidate.resumeUrl,
+      video: candidate.videoUrl,
+      audio: candidate.audioUrl,
+      uploads: candidate.uploads || [],
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
