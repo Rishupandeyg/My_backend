@@ -60,7 +60,7 @@ app.use("/api/applications", applicationRoutes);
 app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
 
 // ----------------- SERVE FRONTEND BUILD -----------------
-const frontendPath = path.join(__dirname, "../frontend/dist");
+const frontendPath = path.join(__dirname, ".../frontend/dist");
 
 // Serve static files from React build
 app.use(express.static(frontendPath));
