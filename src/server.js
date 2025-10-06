@@ -60,15 +60,15 @@ app.use("/api/applications", applicationRoutes);
 app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
 
 // ----------------- SERVE FRONTEND BUILD -----------------
-const frontendPath = path.join(__dirname, ".../frontend/dist");
-
-// Serve static files from React build
+// Serve static files from Vite build
+const frontendPath = path.join(__dirname, "../frontend/dist");
 app.use(express.static(frontendPath));
 
-// Catch-all route for React Router (must come AFTER API routes)
-app.get("/:pathMatch(.*)*", (req, res) => {
+// Catch-all route for React Router (Express v4 compatible)
+app.get("*", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
+
 
 // ----------------- DATABASE & SERVER -----------------
 mongoose
