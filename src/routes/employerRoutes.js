@@ -33,6 +33,29 @@ router.put("/profile", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+// Get a specific candidate's uploads 
+router.get("/candidate/:id/uploads", auth, async (req, res) => {
+  if (req.user.role !== "employer") {
+    return res.status(403).json({ msg: "Access denied: Admins only" });
+  }
+
+  try {
+    const candidate = await Candidate.findById(req.params.id).select(
+      "photoUrl resumeUrl videoUrl audioUrl uploads"
+    );
+    if (!candidate) return res.status(404).json({ msg: "Candidate not found" });
+
+    res.json({
+      photo: candidate.photoUrl,
+      resume: candidate.resumeUrl,
+      video: candidate.videoUrl,
+      audio: candidate.audioUrl,
+      uploads: candidate.uploads || [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET all candidates (employer access)
 router.get("/candidates", authMiddleware, async (req, res) => {
