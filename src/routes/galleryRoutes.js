@@ -1,6 +1,6 @@
 import express from "express";
 import Gallery from "../models/Gallery.js";
-import { authMiddleware } from "../middlewares/auth.js";
+import auth, { authorizeRoles } from "../middlewares/auth.js";
 
 const router = express.Router();
 
@@ -15,11 +15,8 @@ router.get("/", async (req, res) => {
 });
 
 // 🗑️ Delete media (admin only)
-router.delete("/:id", authMiddleware, async (req, res) => {
+router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
   try {
-    if (req.user.userType !== "Admin") {
-      return res.status(403).json({ message: "Access denied" });
-    }
     await Gallery.findByIdAndDelete(req.params.id);
     res.json({ message: "Deleted successfully" });
   } catch (error) {
