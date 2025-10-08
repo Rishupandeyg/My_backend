@@ -10,7 +10,7 @@ const router = express.Router();
 // Admin Routes
 // -----------------------
 
-//  Get all candidates with uploads
+// ✅ Get all candidates with uploads
 router.get("/candidates", auth, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ msg: "Access denied: Admins only" });
@@ -44,7 +44,7 @@ router.get("/candidates", auth, async (req, res) => {
   }
 });
 
-//  Get a specific candidate's uploads (admin only)
+// ✅ Get a specific candidate's uploads (admin only)
 router.get("/candidate/:id/uploads", auth, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ msg: "Access denied: Admins only" });
@@ -68,7 +68,7 @@ router.get("/candidate/:id/uploads", auth, async (req, res) => {
   }
 });
 
-// Get all employers
+// ✅ Get all employers
 router.get("/employers", auth, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ msg: "Access denied: Admins only" });
@@ -82,7 +82,7 @@ router.get("/employers", auth, async (req, res) => {
   }
 });
 
-// Delete candidate
+// ✅ Delete candidate
 router.delete("/candidate/:id", auth, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ msg: "Access denied: Admins only" });
@@ -97,7 +97,7 @@ router.delete("/candidate/:id", auth, async (req, res) => {
   }
 });
 
-// Delete employer
+// ✅ Delete employer
 router.delete("/employer/:id", auth, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ msg: "Access denied: Admins only" });
