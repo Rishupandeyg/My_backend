@@ -64,7 +64,7 @@ app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
 app.use("/api/gallery", galleryRoutes);
 // ----------------- SERVE FRONTEND BUILD -----------------
 // Serve static files from Vite build
-const frontendPath = path.join(__dirname, "../../frontend/dist");
+const frontendPath = path.join(__dirname, "../../frontend/dist/index.html");
 
 // Serve static files
 app.use(express.static(frontendPath));
@@ -156,7 +156,7 @@ mongoose
 // app.use("/api/employer", employerRoutes);
 // app.use("/api/jobs", jobRoutes);
 // app.use("/api/applications", applicationRoutes);
-// app.use("/api/v1/upload", uploadRoutes); // ✅ Cloudinary file upload
+// app.use("/api/v1/upload", uploadRoutes); //  Cloudinary file upload
 
 // // Default route
 // app.get("/", (req, res) => res.send("🚀 Server is running!"));
@@ -165,7 +165,7 @@ mongoose
 // mongoose
 //   .connect(process.env.MONGO_URI)
 //   .then(async () => {
-//     console.log("✅ MongoDB connected");
+//     console.log(" MongoDB connected");
 
 //     // Create admin if not exists
 //     await createAdmin();
