@@ -64,7 +64,7 @@ app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
 app.use("/api/gallery", galleryRoutes);
 // ----------------- SERVE FRONTEND BUILD -----------------
 // Serve static files from Vite build
-const frontendPath = path.join(__dirname, "../../frontend/dist/index.html");
+const frontendPath = path.join(__dirname, "../../frontend/dist");
 
 // Serve static files
 app.use(express.static(frontendPath));
