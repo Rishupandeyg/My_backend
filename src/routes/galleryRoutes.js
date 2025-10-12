@@ -1,47 +1,45 @@
-// src/routes/galleryRoutes.js
 import express from "express";
-import path from "path";
 import fs from "fs";
+import path from "path";
 import Gallery from "../models/Gallery.js";
 import auth, { authorizeRoles } from "../middlewares/auth.js";
+import fileUpload from "express-fileupload";
 
 const router = express.Router();
 
+// Enable file upload middleware
+router.use(fileUpload());
+
 // 🖼 Upload media (admin only)
-// Using express-fileupload, file is available in req.files.file
 router.post("/upload", auth, authorizeRoles("admin"), async (req, res) => {
-  if (!req.files || !req.files.file)
-    return res.status(400).json({ message: "No file uploaded" });
+  if (!req.files || !req.files.file) return res.status(400).json({ message: "No file uploaded" });
 
-  try {
-    const file = req.files.file;
-    const uploadDir = path.join("uploads", "gallery");
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  const file = req.files.file;
+  const uploadDir = "./uploads/gallery";
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-    const filename = Date.now() + path.extname(file.name);
-    const filepath = path.join(uploadDir, filename);
+  const filename = Date.now() + path.extname(file.name);
+  const filepath = path.join(uploadDir, filename);
 
-    // Move file to uploads folder
-    await file.mv(filepath);
+  file.mv(filepath, async (err) => {
+    if (err) return res.status(500).json({ message: "Upload failed", error: err.message });
 
-    const newMedia = await Gallery.create({
-      filename,
-      filepath,
-      uploadedBy: req.user.id,
-      fileType: file.mimetype.startsWith("image")
-        ? "photo"
-        : file.mimetype.startsWith("video")
-        ? "video"
-        : "audio",
-    });
+    try {
+      const newMedia = await Gallery.create({
+        filename,
+        filepath,
+        fileType: req.body.fileType || "photo",
+        uploadedBy: req.user.id,
+      });
 
-    res.status(201).json(newMedia);
-  } catch (err) {
-    res.status(500).json({ message: "Upload failed", error: err.message });
-  }
+      res.status(201).json(newMedia);
+    } catch (err) {
+      res.status(500).json({ message: "Upload failed", error: err.message });
+    }
+  });
 });
 
-// 🧾 Get all gallery media (public)
+// 🧾 Get all gallery media
 router.get("/", async (req, res) => {
   try {
     const media = await Gallery.find().sort({ createdAt: -1 });
@@ -57,21 +55,95 @@ router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
     const media = await Gallery.findById(req.params.id);
     if (!media) return res.status(404).json({ message: "Media not found" });
 
-    // Delete file from server
-    if (fs.existsSync(media.filepath)) {
-      fs.unlinkSync(media.filepath);
-    }
+    const filePath = media.filepath || `./uploads/gallery/${media.filename}`;
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
-    // Delete from database
     await media.remove();
-
     res.json({ message: "Deleted successfully" });
   } catch (error) {
+    console.error("Delete error:", error);
     res.status(500).json({ message: "Failed to delete media", error });
   }
 });
 
 export default router;
+
+
+
+// // src/routes/galleryRoutes.js
+// import express from "express";
+// import path from "path";
+// import fs from "fs";
+// import Gallery from "../models/Gallery.js";
+// import auth, { authorizeRoles } from "../middlewares/auth.js";
+
+// const router = express.Router();
+
+// // 🖼 Upload media (admin only)
+// // Using express-fileupload, file is available in req.files.file
+// router.post("/upload", auth, authorizeRoles("admin"), async (req, res) => {
+//   if (!req.files || !req.files.file)
+//     return res.status(400).json({ message: "No file uploaded" });
+
+//   try {
+//     const file = req.files.file;
+//     const uploadDir = path.join("uploads", "gallery");
+//     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+//     const filename = Date.now() + path.extname(file.name);
+//     const filepath = path.join(uploadDir, filename);
+
+//     // Move file to uploads folder
+//     await file.mv(filepath);
+
+//     const newMedia = await Gallery.create({
+//       filename,
+//       filepath,
+//       uploadedBy: req.user.id,
+//       fileType: file.mimetype.startsWith("image")
+//         ? "photo"
+//         : file.mimetype.startsWith("video")
+//         ? "video"
+//         : "audio",
+//     });
+
+//     res.status(201).json(newMedia);
+//   } catch (err) {
+//     res.status(500).json({ message: "Upload failed", error: err.message });
+//   }
+// });
+
+// // 🧾 Get all gallery media (public)
+// router.get("/", async (req, res) => {
+//   try {
+//     const media = await Gallery.find().sort({ createdAt: -1 });
+//     res.json(media);
+//   } catch (error) {
+//     res.status(500).json({ message: "Failed to fetch gallery", error });
+//   }
+// });
+
+// // 🗑️ Delete media (admin only)
+// router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
+//   try {
+//     const media = await Gallery.findById(req.params.id);
+//     if (!media) return res.status(404).json({ message: "Media not found" });
+
+//     // Delete file from server
+//     if (fs.existsSync(media.filepath)) {
+//       fs.unlinkSync(media.filepath);
+//     }
+
+//     // Delete from database
+//     await media.remove();
+
+//     res.json({ message: "Deleted successfully" });
+//   } catch (error) {
+//     res.status(500).json({ message: "Failed to delete media", error });
+//   }
+// });
+
+// export default router;
 
 
 
