@@ -4,6 +4,7 @@ import path from "path";
 import Gallery from "../models/Gallery.js";
 import auth, { authorizeRoles } from "../middlewares/auth.js";
 import fileUpload from "express-fileupload";
+import cloudinary from "../config/cloudinary.js"; // Cloudinary config
 
 const router = express.Router();
 
@@ -12,31 +13,33 @@ router.use(fileUpload());
 
 // 🖼 Upload media (admin only)
 router.post("/upload", auth, authorizeRoles("admin"), async (req, res) => {
-  if (!req.files || !req.files.file) return res.status(400).json({ message: "No file uploaded" });
+  if (!req.files || !req.files.file)
+    return res.status(400).json({ message: "No file uploaded" });
 
   const file = req.files.file;
+
+  // If you want local storage
   const uploadDir = "./uploads/gallery";
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-  const filename = Date.now() + path.extname(file.name);
-  const filepath = path.join(uploadDir, filename);
+  try {
+    // Upload to Cloudinary
+    const uploadResult = await cloudinary.uploader.upload(file.tempFilePath, {
+      folder: "gallery",
+    });
 
-  file.mv(filepath, async (err) => {
-    if (err) return res.status(500).json({ message: "Upload failed", error: err.message });
+    const newMedia = await Gallery.create({
+      url: uploadResult.secure_url,      // Cloudinary URL
+      public_id: uploadResult.public_id, // Cloudinary public_id
+      fileType: req.body.fileType || "photo",
+      uploadedBy: req.user.id,
+    });
 
-    try {
-      const newMedia = await Gallery.create({
-        filename,
-        filepath,
-        fileType: req.body.fileType || "photo",
-        uploadedBy: req.user.id,
-      });
-
-      res.status(201).json(newMedia);
-    } catch (err) {
-      res.status(500).json({ message: "Upload failed", error: err.message });
-    }
-  });
+    res.status(201).json(newMedia);
+  } catch (err) {
+    console.error("❌ Upload failed:", err);
+    res.status(500).json({ message: "Upload failed", error: err.message });
+  }
 });
 
 // 🧾 Get all gallery media
@@ -48,6 +51,8 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch gallery", error });
   }
 });
+
+// 🗑️ Delete media (admin only)
 router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
   try {
     console.log("🗑️ Delete route hit for:", req.params.id);
@@ -58,46 +63,67 @@ router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
       return res.status(404).json({ message: "Media not found" });
     }
 
-    const filePath = path.resolve(media.filepath || `./uploads/gallery/${media.filename}`);
-    console.log("🧾 File path to delete:", filePath);
-
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log("✅ File deleted from server");
-    } else {
-      console.log("⚠️ File not found on disk, skipping unlink");
+    // Delete from Cloudinary if exists
+    if (media.public_id) {
+      const result = await cloudinary.uploader.destroy(media.public_id);
+      console.log("🧹 Cloudinary delete result:", result);
     }
 
+    // Delete local file if exists (optional fallback)
+    const filePath = path.resolve(media.filepath || `./uploads/gallery/${media.filename}`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log("✅ File deleted from local server");
+    } else {
+      console.log("⚠️ Local file not found, skipping unlink");
+    }
+
+    // Delete MongoDB record
     await media.deleteOne();
     console.log("✅ MongoDB record deleted");
 
-    res.json({ message: "Deleted successfully" });
+    res.json({ message: "Media deleted successfully" });
   } catch (error) {
     console.error("❌ Delete error:", error);
     res.status(500).json({ message: "Failed to delete media", error: error.message });
   }
 });
 
-// // 🗑️ Delete media (admin only)
-// router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
-//   try {
-//     const media = await Gallery.findById(req.params.id);
-//     if (!media) return res.status(404).json({ message: "Media not found" });
-
-//     const filePath = media.filepath || `./uploads/gallery/${media.filename}`;
-//     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-
-//     await media.remove();
-//     res.json({ message: "Deleted successfully" });
-//   } catch (error) {
-//     console.error("Delete error:", error);
-//     res.status(500).json({ message: "Failed to delete media", error });
-//   }
-// });
-
 export default router;
 
 
+
+
+
+// router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
+//   try {
+//     console.log("🗑️ Delete route hit for:", req.params.id);
+
+//     const media = await Gallery.findById(req.params.id);
+//     if (!media) {
+//       console.log("❌ Media not found in DB");
+//       return res.status(404).json({ message: "Media not found" });
+//     }
+
+//     const filePath = path.resolve(media.filepath || `./uploads/gallery/${media.filename}`);
+//     console.log("🧾 File path to delete:", filePath);
+
+//     if (fs.existsSync(filePath)) {
+//       fs.unlinkSync(filePath);
+//       console.log("✅ File deleted from server");
+//     } else {
+//       console.log("⚠️ File not found on disk, skipping unlink");
+//     }
+
+//     await media.deleteOne();
+//     console.log("✅ MongoDB record deleted");
+
+//     res.json({ message: "Deleted successfully" });
+//   } catch (error) {
+//     console.error("❌ Delete error:", error);
+//     res.status(500).json({ message: "Failed to delete media", error: error.message });
+//   }
+// });
 
 // // src/routes/galleryRoutes.js
 // import express from "express";
