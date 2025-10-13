@@ -1,7 +1,7 @@
 import express from "express";
 import Contact from "../models/Contact.js";
 import nodemailer from "nodemailer";
-import { verifyAdmin } from "../middleware/authMiddleware.js"; // Make sure this exists
+import { verifyAdmin } from "../middlewares/auth.js"; // Make sure this exists
 
 const router = express.Router();
 
