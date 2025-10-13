@@ -1,5 +1,5 @@
 import express from "express";
-import auth, { verifyAdmin } from "../middlewares/auth.js";
+import auth from "../middlewares/auth.js";
 import { submitContact, getAllContacts } from "../controllers/contactController.js";
 
 const router = express.Router();
@@ -8,7 +8,7 @@ const router = express.Router();
 router.post("/", submitContact);
 
 // ADMIN ONLY: Get all contact messages
-router.get("/", auth, verifyAdmin, getAllContacts);
+router.get("/", auth,  getAllContacts);
 
 export default router;
 
