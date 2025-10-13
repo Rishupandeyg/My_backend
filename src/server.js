@@ -63,7 +63,7 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
 app.use("/api/gallery", galleryRoutes);
-app.use("/api/contact", contactRoutes):
+app.use("/api/contact", contactRoutes);
 // ----------------- SERVE FRONTEND BUILD -----------------
 // Serve static files from Vite build
 const frontendPath = path.join(__dirname, "../../frontend/dist");
