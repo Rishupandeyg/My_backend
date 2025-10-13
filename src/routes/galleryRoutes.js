@@ -48,23 +48,52 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch gallery", error });
   }
 });
-
-// 🗑️ Delete media (admin only)
 router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
   try {
+    console.log("🗑️ Delete route hit for:", req.params.id);
+
     const media = await Gallery.findById(req.params.id);
-    if (!media) return res.status(404).json({ message: "Media not found" });
+    if (!media) {
+      console.log("❌ Media not found in DB");
+      return res.status(404).json({ message: "Media not found" });
+    }
 
-    const filePath = media.filepath || `./uploads/gallery/${media.filename}`;
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const filePath = path.resolve(media.filepath || `./uploads/gallery/${media.filename}`);
+    console.log("🧾 File path to delete:", filePath);
 
-    await media.remove();
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log("✅ File deleted from server");
+    } else {
+      console.log("⚠️ File not found on disk, skipping unlink");
+    }
+
+    await media.deleteOne();
+    console.log("✅ MongoDB record deleted");
+
     res.json({ message: "Deleted successfully" });
   } catch (error) {
-    console.error("Delete error:", error);
-    res.status(500).json({ message: "Failed to delete media", error });
+    console.error("❌ Delete error:", error);
+    res.status(500).json({ message: "Failed to delete media", error: error.message });
   }
 });
+
+// // 🗑️ Delete media (admin only)
+// router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
+//   try {
+//     const media = await Gallery.findById(req.params.id);
+//     if (!media) return res.status(404).json({ message: "Media not found" });
+
+//     const filePath = media.filepath || `./uploads/gallery/${media.filename}`;
+//     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+//     await media.remove();
+//     res.json({ message: "Deleted successfully" });
+//   } catch (error) {
+//     console.error("Delete error:", error);
+//     res.status(500).json({ message: "Failed to delete media", error });
+//   }
+// });
 
 export default router;
 
