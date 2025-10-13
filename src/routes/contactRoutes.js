@@ -1,9 +1,12 @@
 import express from "express";
 import Contact from "../models/Contact.js";
 import nodemailer from "nodemailer";
+import { verifyAdmin } from "../middleware/authMiddleware.js"; // Make sure this exists
 
 const router = express.Router();
 
+// ---------------------
+// PUBLIC: Submit Contact Form
 // POST /api/contact
 router.post("/", async (req, res) => {
   try {
@@ -23,8 +26,8 @@ router.post("/", async (req, res) => {
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: process.env.SMTP_USER, // your email
-        pass: process.env.SMTP_PASS, // app password
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
 
@@ -38,13 +41,26 @@ router.post("/", async (req, res) => {
     await transporter.sendMail(mailOptions);
     */
 
-    // ✅ Respond with message + data key (number for tests)
+    // Respond with message + data key (number for tests)
     res.status(200).json({
       message: "Message sent successfully!",
-      data: 1, // number to satisfy test assertions
+      data: 1,
     });
   } catch (err) {
-    console.error("Error in /api/contact:", err);
+    console.error("Error in /api/contact POST:", err);
+    res.status(500).json({ error: "Server error", data: null });
+  }
+});
+
+// ---------------------
+// ADMIN ONLY: Get All Messages
+// GET /api/contact
+router.get("/", verifyAdmin, async (req, res) => {
+  try {
+    const contacts = await Contact.find().sort({ createdAt: -1 }); // newest first
+    res.status(200).json({ data: contacts });
+  } catch (err) {
+    console.error("Error in /api/contact GET:", err);
     res.status(500).json({ error: "Server error", data: null });
   }
 });
