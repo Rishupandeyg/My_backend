@@ -4,7 +4,7 @@ import path from "path";
 import Gallery from "../models/Gallery.js";
 import auth, { authorizeRoles } from "../middlewares/auth.js";
 import fileUpload from "express-fileupload";
-import cloudinary from "../config/cloudinary.js"; // Cloudinary config
+import { cloudinary } from "../config/cloudinary.js"; // named import
 
 const router = express.Router();
 
@@ -18,19 +18,16 @@ router.post("/upload", auth, authorizeRoles("admin"), async (req, res) => {
 
   const file = req.files.file;
 
-  // If you want local storage
-  const uploadDir = "./uploads/gallery";
-  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
   try {
     // Upload to Cloudinary
     const uploadResult = await cloudinary.uploader.upload(file.tempFilePath, {
       folder: "gallery",
     });
 
+    // Save in MongoDB
     const newMedia = await Gallery.create({
-      url: uploadResult.secure_url,      // Cloudinary URL
-      public_id: uploadResult.public_id, // Cloudinary public_id
+      url: uploadResult.secure_url,
+      public_id: uploadResult.public_id,
       fileType: req.body.fileType || "photo",
       uploadedBy: req.user.id,
     });
@@ -63,7 +60,7 @@ router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
       return res.status(404).json({ message: "Media not found" });
     }
 
-    // Delete from Cloudinary if exists
+    // Delete from Cloudinary if public_id exists
     if (media.public_id) {
       const result = await cloudinary.uploader.destroy(media.public_id);
       console.log("🧹 Cloudinary delete result:", result);
@@ -90,6 +87,7 @@ router.delete("/:id", auth, authorizeRoles("admin"), async (req, res) => {
 });
 
 export default router;
+
 
 
 
