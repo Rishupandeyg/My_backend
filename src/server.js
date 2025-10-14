@@ -58,7 +58,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.options("*", cors()); // ✅ Handle OPTIONS preflight
+app.options("/*", cors()); // ✅ Handle OPTIONS preflight
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
