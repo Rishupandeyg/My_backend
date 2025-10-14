@@ -40,28 +40,34 @@ const __dirname = path.dirname(__filename);
 // ✅ Updated CORS setup
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://kbtalentbridgestudios.com/"],
+    origin: [
+      "http://localhost:5173",
+      "https://kbtalentbridgestudios.com",
+      "https://kbtalentbridgestudios.com/",
+    ],
     credentials: true,
   })
 );
 
-// ✅ Allow headers & methods for preflight requests
-app.use((req, res, next) => {
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.header(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  next();
-});
-
-app.options( cors()); // ✅ Handle OPTIONS preflight
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ✅ Handle preflight manually (Render + Express 5 safe)
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+    );
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    );
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Configure express-fileupload
 app.use(
@@ -116,7 +122,6 @@ mongoose
     );
   })
   .catch((err) => console.log("❌ MongoDB Error:", err));
-
 
 
 
