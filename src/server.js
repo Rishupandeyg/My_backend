@@ -17,8 +17,6 @@ import galleryRoutes from "./routes/galleryRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import adminJobRoutes from "./routes/adminJobRoutes.js";
 
-
-
 // Admin setup
 import createAdmin from "./config/adminSetup.js";
 
@@ -38,7 +36,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ----------------- MIDDLEWARE -----------------
-app.use(cors({ origin: "*" }));
+// Proper CORS to allow Authorization header
+app.use(cors({
+  origin: "*", // ya frontend ka exact URL: "http://localhost:5173"
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -46,9 +51,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(
   fileUpload({
     useTempFiles: true,
-    tempFileDir: "/tmp/", // safe location for temporary uploads
+    tempFileDir: "/tmp/", 
     createParentPath: true,
-    limits: { fileSize: 50 * 1024 * 1024 }, // max 50MB
+    limits: { fileSize: 50 * 1024 * 1024 }, 
   })
 );
 
@@ -62,40 +67,130 @@ app.use("/api/candidate", candidateRoutes);
 app.use("/api/employer", employerRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
-app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
+app.use("/api/v1/upload", uploadRoutes); 
 app.use("/api/gallery", galleryRoutes);
 app.use("/api/contact", contactRoutes);
-
-
 app.use("/api/admin/jobs", adminJobRoutes);
 
 // ----------------- SERVE FRONTEND BUILD -----------------
-// Serve static files from Vite build
 const frontendPath = path.join(__dirname, "../../frontend/dist");
-
-// Serve static files
 app.use(express.static(frontendPath));
-
-// Catch-all route for React Router
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
-
-
 
 // ----------------- DATABASE & SERVER -----------------
 mongoose
   .connect(process.env.MONGO_URI)
   .then(async () => {
     console.log("✅ MongoDB connected");
-
-    // Create admin if not exists
     await createAdmin();
-
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => console.log("❌ MongoDB Error:", err));
+
+
+
+
+// import express from "express";
+// import mongoose from "mongoose";
+// import dotenv from "dotenv";
+// import cors from "cors";
+// import path from "path";
+// import { fileURLToPath } from "url";
+
+// // Routes
+// import authRoutes from "./routes/authRoutes.js";
+// import adminRoutes from "./routes/adminRoutes.js";
+// import candidateRoutes from "./routes/candidateRoutes.js";
+// import employerRoutes from "./routes/employerRoutes.js";
+// import jobRoutes from "./routes/jobs.js";
+// import applicationRoutes from "./routes/applicationRoutes.js";
+// import uploadRoutes from "./routes/fileUpload.js";
+// import galleryRoutes from "./routes/galleryRoutes.js";
+// import contactRoutes from "./routes/contactRoutes.js";
+// import adminJobRoutes from "./routes/adminJobRoutes.js";
+
+
+
+// // Admin setup
+// import createAdmin from "./config/adminSetup.js";
+
+// // File upload middleware
+// import fileUpload from "express-fileupload";
+
+// // Cloudinary
+// import { cloudinaryConnect } from "./config/cloudinary.js";
+
+// // Initialize dotenv
+// dotenv.config();
+
+// const app = express();
+
+// // For __dirname (since we are using ES modules)
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = path.dirname(__filename);
+
+// // ----------------- MIDDLEWARE -----------------
+// app.use(cors({ origin: "*" }));
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
+
+// // Configure express-fileupload
+// app.use(
+//   fileUpload({
+//     useTempFiles: true,
+//     tempFileDir: "/tmp/", // safe location for temporary uploads
+//     createParentPath: true,
+//     limits: { fileSize: 50 * 1024 * 1024 }, // max 50MB
+//   })
+// );
+
+// // Connect Cloudinary once
+// cloudinaryConnect();
+
+// // ----------------- API ROUTES -----------------
+// app.use("/api/auth", authRoutes);
+// app.use("/api/admin", adminRoutes);
+// app.use("/api/candidate", candidateRoutes);
+// app.use("/api/employer", employerRoutes);
+// app.use("/api/jobs", jobRoutes);
+// app.use("/api/applications", applicationRoutes);
+// app.use("/api/v1/upload", uploadRoutes); // Cloudinary file upload
+// app.use("/api/gallery", galleryRoutes);
+// app.use("/api/contact", contactRoutes);
+
+
+// app.use("/api/admin/jobs", adminJobRoutes);
+
+// // ----------------- SERVE FRONTEND BUILD -----------------
+// // Serve static files from Vite build
+// const frontendPath = path.join(__dirname, "../../frontend/dist");
+
+// // Serve static files
+// app.use(express.static(frontendPath));
+
+// // Catch-all route for React Router
+// app.get(/.*/, (req, res) => {
+//   res.sendFile(path.join(frontendPath, "index.html"));
+// });
+
+
+
+// // ----------------- DATABASE & SERVER -----------------
+// mongoose
+//   .connect(process.env.MONGO_URI)
+//   .then(async () => {
+//     console.log("✅ MongoDB connected");
+
+//     // Create admin if not exists
+//     await createAdmin();
+
+//     const PORT = process.env.PORT || 5000;
+//     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+//   })
+//   .catch((err) => console.log("❌ MongoDB Error:", err));
 
 
 
