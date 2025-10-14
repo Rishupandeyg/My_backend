@@ -94,8 +94,8 @@ app.use("/api/gallery", galleryRoutes);
 app.use("/api/contact", contactRoutes);
 
 // Mount admin jobs route
-app.use("/api/admin/job", adminJobRoutes);
-console.log("✅ Mounted admin jobs route at /api/admin/job");
+app.use("/api/admin/jobs", adminJobRoutes);
+console.log("✅ Mounted admin jobs route at /api/admin/jobs");
 
 // ----------------- SERVE FRONTEND BUILD -----------------
 const frontendPath = path.join(__dirname, "../../frontend/dist");
