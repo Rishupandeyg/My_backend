@@ -144,7 +144,7 @@ import uploadRoutes from "./routes/fileUpload.js";
 import galleryRoutes from "./routes/galleryRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import adminJobRoutes from "./routes/adminJobRoutes.js";
-
+import jobCategoryRoutes from "./routes/jobCategoryRoutes";
 // Admin setup
 import createAdmin from "./config/adminSetup.js";
 
@@ -222,6 +222,8 @@ app.use("/api/gallery", galleryRoutes);
 app.use("/api/contact", contactRoutes);
 
 app.use("/api/admin/jobs", adminJobRoutes);
+
+app.use("/api/jobcategories", jobCategoryRoutes);
 
 // ----------------- SERVE FRONTEND BUILD -----------------
 // Serve static files from Vite build

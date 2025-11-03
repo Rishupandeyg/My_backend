@@ -1,9 +1,9 @@
-import mongoose from "mongoose";
+// server/models/JobCategory.js
+const mongoose = require("mongoose");
 
-const JobPostSchema = new mongoose.Schema({
-  category: { type: String, required: true },
-  postedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  amount : {type: String, required: true} 
-});
+const jobCategorySchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  // any other fields you need
+}, { timestamps: true });
 
-export default mongoose.model("JobCategory", JobCategory);
+module.exports = mongoose.model("JobCategory", jobCategorySchema);
