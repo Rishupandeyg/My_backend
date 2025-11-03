@@ -1,13 +1,15 @@
 // server/routes/jobcategories.js
-const express = require("express");
-const router = express.Router();
-const JobCategory = require("../models/JobCategory"); // see model below
+import express from "express";
+import JobCategory from "../models/JobCategory.js";
 
-// GET /api/jobcategories
+const router = express.Router();
+
 router.get("/", async (req, res) => {
   try {
-    const categories = await JobCategory.find({}, { name: 1 }).sort({ name: 1 }).lean();
-    // return an array of objects [{ _id, name }, ...]
+    const categories = await JobCategory.find({}, { name: 1 })
+      .sort({ name: 1 })
+      .lean();
+
     res.json(categories);
   } catch (err) {
     console.error("Failed to load categories:", err);
@@ -15,4 +17,4 @@ router.get("/", async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
