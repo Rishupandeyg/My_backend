@@ -2,18 +2,14 @@
 import express from "express";
 const router = express.Router();
 
-const sampleJobs = [
-  { _id: "job_1", title: "Frontend Developer", company: "KB Talent Bridge", location: "Remote", finalPrice: 499 },
-  { _id: "job_2", title: "Graphic Designer", company: "KB Talent Bridge", location: "Delhi", finalPrice: 299 },
-];
-
-router.get("/jobs", (req, res) => res.json({ jobs: sampleJobs }));
+router.get("/jobs", (req, res) => {
+  return res.json({ jobs: [{ _id:"job_1", title:"Frontend Dev", finalPrice:499 }] });
+});
 
 router.get("/candidate/me", (req, res) => {
   const auth = req.headers.authorization || "";
   if (!auth) return res.status(404).json({ message: "Not authenticated" });
-  const candidate = { name: "Test Candidate", email: "candidate@example.com", contact: "9999999999" };
-  return res.json({ candidate });
+  return res.json({ candidate: { name: "Test Candidate", email: "candidate@example.com", contact: "9999999999" } });
 });
 
 router.post("/payments/create-order", (req, res) => {
