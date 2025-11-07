@@ -1,4 +1,4 @@
-// backend/server.js
+// backend/src/server.js
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -6,7 +6,6 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Routes
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import candidateRoutes from "./routes/candidateRoutes.js";
@@ -18,85 +17,64 @@ import galleryRoutes from "./routes/galleryRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import adminJobRoutes from "./routes/adminJobRoutes.js";
 import jobCategoryRoutes from "./routes/jobCategoryRoutes.js";
-// Payment routes: either real (paymentRoutes) or mock (devMockRoutes)
-import paymentRoutes from "./routes/paymentRoutes.js";
-import devMockRoutes from "./routes/devMockRoutes.js"; // optional mock file
+import paymentRoutes from "./routes/paymentRoutes.js"; // real routes
 
-// Admin setup
 import createAdmin from "./config/adminSetup.js";
-
-// File upload middleware
 import fileUpload from "express-fileupload";
-
-// Cloudinary
 import { cloudinaryConnect } from "./config/cloudinary.js";
 
-// Initialize dotenv
 dotenv.config();
-
 const app = express();
-
-// For __dirname (since we are using ES modules)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ----------------- MIDDLEWARE -----------------
-
-// CORS: allow configured origins or sensible defaults
+// CORS setup
 const allowedOrigins = [
   "http://localhost:5173",
   "https://kbtalentbridgestudios.com",
-  process.env.FRONTEND_URL, // add frontend URL via env if deployed
+  process.env.FRONTEND_URL,
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow requests with no origin (e.g., mobile apps, curl)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
-      // allow if in dev mode or explicitly allowed via env var
-      if (process.env.ALLOW_ALL_ORIGINS === "true") return callback(null, true);
-      return callback(new Error("CORS policy: origin not allowed"), false);
-    },
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    if (process.env.ALLOW_ALL_ORIGINS === "true") return callback(null, true);
+    return callback(new Error("CORS policy: origin not allowed"), false);
+  },
+  credentials: true,
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Handle preflight requests (safeguard)
+// Preflight handler
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
     res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.header(
-      "Access-Control-Allow-Headers",
-      "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-    );
-    res.header(
-      "Access-Control-Allow-Methods",
-      "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-    );
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
     return res.sendStatus(200);
   }
   next();
 });
 
-// Configure express-fileupload
-app.use(
-  fileUpload({
-    useTempFiles: true,
-    tempFileDir: "/tmp/",
-    createParentPath: true,
-    limits: { fileSize: 50 * 1024 * 1024 },
-  })
-);
+// file upload
+app.use(fileUpload({
+  useTempFiles: true,
+  tempFileDir: "/tmp/",
+  createParentPath: true,
+  limits: { fileSize: 50 * 1024 * 1024 },
+}));
 
-// Connect Cloudinary once
-cloudinaryConnect();
+// safe cloudinary connect
+try {
+  cloudinaryConnect();
+} catch (e) {
+  console.warn("Cloudinary connection failed (continuing):", e?.message || e);
+}
 
-// ----------------- API ROUTES -----------------
+// API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/candidate", candidateRoutes);
@@ -108,51 +86,52 @@ app.use("/api/gallery", galleryRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/admin/jobs", adminJobRoutes);
 app.use("/api/jobcategories", jobCategoryRoutes);
+app.use("/api/payments", paymentRoutes); // real payments mounted at /api/payments
 
-// Payment route mounting:
-// If USE_MOCK=true in env, mount devMockRoutes (quick unblock). Otherwise mount real paymentRoutes.
+// if USE_MOCK, mount dev mock router dynamically at /api/payments/create-order (it will override)
 if (process.env.USE_MOCK === "true") {
-  console.log("⚠️ Using mock payment routes (USE_MOCK=true)");
-  app.use("/api/payments", devMockRoutes);
-} else {
-  app.use("/api/payments", paymentRoutes);
+  (async () => {
+    try {
+      const { default: devMock } = await import("./routes/devMockRoutes.js");
+      app.use("/api/payments", devMock);
+      console.log("⚠️ Using mock payment routes (USE_MOCK=true)");
+    } catch (err) {
+      console.warn("⚠️ USE_MOCK=true but devMockRoutes import failed:", err?.message || err);
+    }
+  })();
 }
 
-// ----------------- SERVE FRONTEND BUILD -----------------
+// health endpoint
+app.get("/health", (req, res) => res.json({ status: "ok", uptime: process.uptime() }));
+
+// static serve
 const frontendPath = path.join(__dirname, "../../frontend/dist");
 app.use(express.static(frontendPath));
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
 
-// ----------------- DATABASE & SERVER -----------------
+// DB + server start
 const mongoUri = process.env.MONGO_URI;
 if (!mongoUri) {
   console.error("❌ MONGO_URI not set in env. Exiting.");
   process.exit(1);
 }
 
-mongoose
-  .connect(mongoUri)
+mongoose.connect(mongoUri)
   .then(async () => {
     console.log("✅ MongoDB connected");
-
-    // Create admin if not exists
-    try {
-      await createAdmin();
-    } catch (e) {
-      console.warn("⚠️ createAdmin failed:", e?.message || e);
-    }
-
+    try { await createAdmin(); } catch (e) { console.warn("createAdmin failed:", e?.message || e); }
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => {
-    console.log("❌ MongoDB Error:", err);
+    console.error("❌ MongoDB Error:", err);
     process.exit(1);
   });
 
 export default app;
+
 /**
  * "clientId": "TALENTBRIDGEUAT_25110712",
  "clientVersion": 1,
