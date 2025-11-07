@@ -32,14 +32,12 @@ async function getAccessToken() {
   if (!data?.access_token) throw new Error("no_access_token");
 
   cachedToken = data.access_token;
-  // if response has expires_in (seconds), set expiry
   if (data.expires_in) tokenExpiry = Date.now() + Number(data.expires_in) * 1000;
-  else tokenExpiry = Date.now() + 5 * 60 * 1000; // default 5m
+  else tokenExpiry = Date.now() + 5 * 60 * 1000;
 
   return cachedToken;
 }
 
-// Input validation helper
 function validateCreateOrderBody(body) {
   const amount = Number(body?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return "invalid_amount";
@@ -50,6 +48,16 @@ function validateCreateOrderBody(body) {
 router.post("/create-order", async (req, res) => {
   try {
     console.log("🔔 /create-order called - body:", { ...req.body, amount: req.body?.amount });
+
+    // If in test/mock mode, return a mock payment URL quickly
+    if (process.env.USE_MOCK === "true") {
+      const amount = Number(req.body.amount) || 10000;
+      const jobId = req.body.jobId || "unknown";
+      const base = process.env.PAYMENT_REDIRECT_URL || "http://localhost:5173/payment-success";
+      const url = `${base}?txn=MOCK${Date.now()}&amt=${amount}&job=${jobId}`;
+      console.log("⚠️ USE_MOCK=true -> returning mock paymentUrl:", url);
+      return res.json({ paymentUrl: url, merchantTransactionId: `MOCK_${Date.now()}` });
+    }
 
     // 1) required envs
     const needed = ["PHONEPE_CLIENT_ID","PHONEPE_SECRET","PHONEPE_BASE_URL","MERCHANT_ID","BASE_URL","PAYMENT_REDIRECT_URL"];
@@ -69,15 +77,13 @@ router.post("/create-order", async (req, res) => {
       accessToken = await getAccessToken();
       console.log("✅ token obtained (masked), merchantId:", process.env.MERCHANT_ID);
     } catch (err) {
-      console.error("🚨 Token request failed:", err.message || err);
-      return res.status(500).json({ step: "token", error: String(err.message || err) });
+      console.error("🚨 Token request failed:", err.response?.status || err.message || err);
+      return res.status(500).json({ step: "token", error: String(err.response?.data || err.message || err) });
     }
 
     // 4) Build checkout payload (checkout/v2/pay)
     const { amount, jobId, title = "Job Application" } = req.body;
-    // amount must be in paise (integer)
     const amountInt = Math.round(Number(amount));
-
     const merchantTransactionId = `TXN${Date.now()}_${Math.floor(Math.random()*9999)}`;
 
     const payload = {
@@ -85,24 +91,18 @@ router.post("/create-order", async (req, res) => {
       merchantTransactionId,
       amount: amountInt,
       expireAfter: 1200,
-      metaInfo: {
-        jobId,
-        title,
-      },
+      metaInfo: { jobId, title },
       paymentFlow: {
         type: "PG_CHECKOUT",
         message: `Payment for ${title}`,
-        merchantUrls: {
-          redirectUrl: process.env.PAYMENT_REDIRECT_URL
-        }
+        merchantUrls: { redirectUrl: process.env.PAYMENT_REDIRECT_URL }
       }
     };
 
-    // 5) call checkout endpoint
     let payRes;
     try {
-      const url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay";
-      payRes = await axios.post(url, payload, {
+      const PAY_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay";
+      payRes = await axios.post(PAY_URL, payload, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
@@ -115,15 +115,14 @@ router.post("/create-order", async (req, res) => {
       return res.status(500).json({ step: "pay", status: err.response?.status || null, error: err.response?.data || err.message });
     }
 
-    // 6) parse redirect URL (checkout v2 returns instrumentResponse.redirectInfo.url)
+    // parse redirect URL
     const redirectUrl = payRes.data?.data?.instrumentResponse?.redirectInfo?.url;
     if (!redirectUrl) {
       console.error("❌ No redirect url in payRes:", payRes.data);
       return res.status(500).json({ step: "pay", error: "no_redirect_url", payRes: payRes.data });
     }
 
-    // Optionally persist the pending transaction to DB here (recommended)
-
+    // success
     return res.json({ paymentUrl: redirectUrl, merchantTransactionId });
   } catch (err) {
     console.error("🔥 Unexpected error:", err);

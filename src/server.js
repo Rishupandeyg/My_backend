@@ -114,7 +114,7 @@ app.get(/.*/, (req, res) => {
 // DB + server start
 const mongoUri = process.env.MONGO_URI;
 if (!mongoUri) {
-  console.error("❌ MONGO_URI not set in env. Exiting.");
+  console.error(" MONGO_URI not set in env. Exiting.");
   process.exit(1);
 }
 
@@ -126,7 +126,7 @@ mongoose.connect(mongoUri)
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => {
-    console.error("❌ MongoDB Error:", err);
+    console.error(" MongoDB Error:", err);
     process.exit(1);
   });
 
