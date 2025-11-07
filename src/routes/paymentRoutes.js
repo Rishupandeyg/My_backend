@@ -1,4 +1,4 @@
-// backend/routes/paymentRoutes.js  (MOCK)
+// backend/routes/paymentRoutes.js  (MOCK -> redirect to your frontend)
 import express from "express";
 const router = express.Router();
 
@@ -7,8 +7,11 @@ router.post("/create-order", (req, res) => {
     console.log("🟡 mock /create-order called, body:", req.body);
     const amount = req.body.amount || 10000; // paise
     const jobId = req.body.jobId || "unknown";
-    // fake payment url (या अपने frontend पे payment-success route दे दो)
-    const fakeUrl = `https://example.com/fake-phonepe-pay?txn=MOCK${Date.now()}&amt=${amount}&job=${jobId}`;
+
+    // use env var PAYMENT_REDIRECT_URL if set, otherwise local dev URL
+    const baseRedirect = process.env.PAYMENT_REDIRECT_URL || "http://localhost:5173/payment-success";
+    const fakeUrl = `${baseRedirect}?txn=MOCK${Date.now()}&amt=${amount}&job=${jobId}`;
+
     return res.json({ paymentUrl: fakeUrl });
   } catch (err) {
     console.error("Mock create-order error:", err);
