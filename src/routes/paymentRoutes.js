@@ -12,27 +12,26 @@ const router = express.Router();
  */
 router.post("/create-order", async (req, res) => {
   try {
-    const { amount, jobId, title } = req.body;
+    console.log("Incoming create-order:", req.body);
 
-    // 1️⃣ Step: Generate Access Token
     const tokenRes = await axios.post(process.env.PHONEPE_BASE_URL, {
       client_id: process.env.PHONEPE_CLIENT_ID,
       client_secret: process.env.PHONEPE_SECRET,
       grant_type: "client_credentials",
     });
 
+    console.log("Token Response:", tokenRes.data);
     const accessToken = tokenRes.data.access_token;
-    if (!accessToken) return res.status(401).json({ message: "Failed to get access token" });
+    if (!accessToken) throw new Error("Access token missing from PhonePe");
 
-    // 2️⃣ Step: Create Payment
     const payRes = await axios.post(
       "https://api-preprod.phonepe.com/apis/pg-sandbox/v3/pay",
       {
         merchantTransactionId: "TXN" + Date.now(),
-        merchantId: "M23B6R5TD3JZN", // extract from your client id (after TEST-)
-        amount: amount,
-        redirectUrl: "http://localhost:5173/payment-success", // your frontend page
-        callbackUrl: "http://localhost:4000/api/payments/status", // backend webhook
+        merchantId: "M23B6R5TD3JZN", // ✅ extracted from your client ID
+        amount: req.body.amount,
+        redirectUrl: "https://your-frontend-domain.com/payment-success",
+        callbackUrl: "https://my-backend-knk9.onrender.com/api/payments/status",
         paymentInstrument: { type: "PAY_PAGE" },
       },
       {
@@ -43,12 +42,11 @@ router.post("/create-order", async (req, res) => {
       }
     );
 
+    console.log("PhonePe payRes:", payRes.data);
+
     const redirectUrl = payRes.data?.data?.instrumentResponse?.redirectInfo?.url;
-    if (redirectUrl) {
-      return res.json({ paymentUrl: redirectUrl });
-    } else {
-      return res.status(400).json({ message: "Payment link not found", data: payRes.data });
-    }
+    if (!redirectUrl) throw new Error("Redirect URL missing");
+    res.json({ paymentUrl: redirectUrl });
   } catch (err) {
     console.error("PhonePe error:", err.response?.data || err.message);
     res.status(500).json({
@@ -57,5 +55,6 @@ router.post("/create-order", async (req, res) => {
     });
   }
 });
+
 
 export default router;
