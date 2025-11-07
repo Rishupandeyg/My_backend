@@ -18,6 +18,7 @@ import galleryRoutes from "./routes/galleryRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import adminJobRoutes from "./routes/adminJobRoutes.js";
 import jobCategoryRoutes from "./routes/jobCategoryRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 // Admin setup
 import createAdmin from "./config/adminSetup.js";
 
@@ -97,6 +98,7 @@ app.use("/api/contact", contactRoutes);
 app.use("/api/admin/jobs", adminJobRoutes);
 
 app.use("/api/jobcategories", jobCategoryRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // ----------------- SERVE FRONTEND BUILD -----------------
 // Serve static files from Vite build
