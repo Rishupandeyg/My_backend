@@ -12,7 +12,7 @@ const router = express.Router();
 const clientID = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const clientVersion = 1;
-const env = Env.SANDBOX; // Use Env.PRODUCTION in live mode
+const env = Env.PRODUCTION; // Use Env.PRODUCTION in live mode
 
 const client = StandardCheckoutClient.getInstance(clientID, clientSecret, clientVersion, env);
 
