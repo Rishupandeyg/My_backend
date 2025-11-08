@@ -38,7 +38,7 @@ function toPaiseFromInput(amountOrPaise) {
   if (Number.isInteger(n) && n % 100 === 0 && n >= 100) {
     return n; // already paise
   }
-  return Math.round(n * 100);
+  return Math.round(n * 10000);
 }
 
 // POST /create-order
