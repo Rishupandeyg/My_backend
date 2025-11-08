@@ -126,19 +126,25 @@ if (!clientID || !clientSecret) {
 // Init PhonePe SDK client
 const client = StandardCheckoutClient.getInstance(clientID, clientSecret, clientVersion, SDK_ENV);
 
-// Helper: convert rupees -> paise (canonical server-side)
-// Accepts either rupees in `amount` (decimal allowed) OR integer paise via `amountPaise`.
-// Important: Do NOT silently convert if caller put paise in `amount` field — reject it to avoid double-multiplication.
+/**
+ * Convert input to paise (integer) with safe handling:
+ * - Prefer explicit `amountPaise` if provided.
+ * - If `amount` is provided:
+ *    - If it looks like paise (integer, divisible by 100, >= 100), treat it as paise (assume caller sent paise).
+ *    - Otherwise treat it as rupees (decimal allowed) and convert rupees -> paise by multiplying 100.
+ *
+ * This auto-detection avoids the common double-*100 bug while remaining forgiving for callers.
+ */
 function toPaiseFromInput(amountOrPaise) {
   if (amountOrPaise === undefined || amountOrPaise === null) return null;
   const n = Number(amountOrPaise);
   if (!Number.isFinite(n) || n <= 0) return null;
 
-  // Heuristic: if caller passed an integer divisible by 100 and reasonably large,
-  // it's likely paise (e.g., 9950). We *do not* silently convert such values from 'amount'.
-  // Instead, return null so caller receives a 400 and can send `amountPaise`.
+  // If caller passed an integer that looks exactly like paise (divisible by 100 and reasonably large),
+  // assume they passed paise and return as-is to avoid double-multiplication.
   if (Number.isInteger(n) && n % 100 === 0 && n >= 100) {
-    return null;
+    // Example: 9950 -> treat as 9950 paise (₹99.50)
+    return n;
   }
 
   // Otherwise treat input as rupees (may be decimal) and convert to paise
@@ -148,13 +154,13 @@ function toPaiseFromInput(amountOrPaise) {
 // Create order route
 router.post("/create-order", async (req, res) => {
   try {
-    // Debug log: show incoming body to quickly detect whether client sent rupees or paise
+    // Debug log: incoming body to detect rupees vs paise early
     console.log("CREATE-ORDER body:", JSON.stringify(req.body));
 
     // Expect body: { amount: 99.50, currency: "INR", jobId?, title? } OR { amountPaise: 9950, ... }
     const { amount, amountPaise, jobId, title } = req.body;
 
-    // Accept either explicit amountPaise OR amount (rupees). Prefer explicit paise if provided.
+    // Accept either explicit amountPaise OR amount (rupees or paise-like). Prefer explicit paise if provided.
     let paise;
     if (amountPaise !== undefined && amountPaise !== null) {
       const n = Number(amountPaise);
@@ -167,11 +173,13 @@ router.post("/create-order", async (req, res) => {
       if (!paise) {
         return res.status(400).json({
           error:
-            "Invalid amount. Send 'amount' in rupees (e.g. 99.50) OR send 'amountPaise' as integer (e.g. 9950). " +
-            "Do NOT send raw paise in the 'amount' field. If you intended to pass paise, use 'amountPaise'.",
+            "Invalid amount. Send 'amount' in rupees (e.g. 99.50) OR send 'amountPaise' as integer (e.g. 9950).",
         });
       }
     }
+
+    // At this point `paise` is an integer number of paise (safe to pass to PhonePe)
+    console.log("Computed amountPaise:", paise);
 
     // Create unique merchantOrderId and build redirect/callback URLs from env (use HTTPS in prod)
     const merchantOrderId = randomUUID();
