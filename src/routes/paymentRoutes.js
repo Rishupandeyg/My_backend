@@ -57,7 +57,7 @@ router.post("/create-order", async (req, res) => {
     // Create unique merchantOrderId and build redirect/callback URLs from env (use HTTPS in prod)
     const merchantOrderId = randomUUID();
     const frontBase = process.env.FRONTEND_BASE || "http://localhost:5173";
-    const serverBase = process.env.SERVER_BASE || `http://localhost:${process.env.PORT || 5000}`;
+    const serverBase = process.env.REACT_APP_API_URL || `http://localhost:${process.env.PORT || 5000}`;
 
     const redirectUrl = `${frontBase.replace(/\/$/, "")}/payment-result?merchantOrderId=${merchantOrderId}`;
     const callbackUrl = `${serverBase.replace(/\/$/, "")}/phonepe-callback`;
