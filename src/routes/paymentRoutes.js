@@ -8,40 +8,50 @@ dotenv.config();
 
 const router = express.Router();
 
-// Validate required env early (will throw if missing)
+// Required envs
 const clientID = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const clientVersion = 1;
 const SDK_ENV = (process.env.NODE_ENV === "production") ? Env.PRODUCTION : Env.SANDBOX;
 
+// Basic env check
 if (!clientID || !clientSecret) {
   console.error("Missing CLIENT_ID or CLIENT_SECRET in env. Payment routes will fail until these are provided.");
 }
 
-// Init PhonePe SDK client
-const client = StandardCheckoutClient.getInstance(clientID, clientSecret, clientVersion, SDK_ENV);
+// Initialize SDK client safely
+let client = null;
+try {
+  if (clientID && clientSecret) {
+    client = StandardCheckoutClient.getInstance(clientID, clientSecret, clientVersion, SDK_ENV);
+  } else {
+    console.warn("PhonePe SDK client not initialized because credentials are missing.");
+  }
+} catch (e) {
+  console.error("Failed to initialize PhonePe SDK client:", e);
+  client = null;
+}
 
-// Helper: convert rupees -> paise (canonical server-side)
+// Helper: convert rupees -> paise
 function toPaiseFromInput(amountOrPaise) {
-  // Accept either:
-  //  - { amount: 99.50 }  -> rupees (float)  OR
-  //  - { amountPaise: 9950 } -> paise (int)
   if (amountOrPaise === undefined || amountOrPaise === null) return null;
   const n = Number(amountOrPaise);
   if (!Number.isFinite(n) || n <= 0) return null;
-  // Heuristic: If value is integer and small (< 1000000), treat as rupees (e.g., 1100 => ₹1100).
-  // But we will assume caller sends rupees normally. Always convert rupees -> paise by multiplying by 100.
-  // If you want to support raw paise field, use 'amountPaise' in body and handle explicitly.
   return Math.round(n * 100);
 }
 
-// Create order route
 router.post("/create-order", async (req, res) => {
   try {
-    // Expect body: { amount: 99.50, currency: "INR", jobId?, title? }
-    const { amount, amountPaise, jobId, title } = req.body;
+    // Ensure body parser enabled in main app: app.use(express.json())
+    const { amount, amountPaise, jobId, title } = req.body ?? {};
 
-    // Accept either explicit amountPaise OR amount (rupees). Prefer explicit paise if provided.
+    // Validate presence of SDK client
+    if (!client) {
+      console.error("PhonePe SDK client not available (missing credentials).");
+      return res.status(500).json({ error: "Payment provider not configured" });
+    }
+
+    // Validate amounts
     let paise;
     if (amountPaise !== undefined && amountPaise !== null) {
       const n = Number(amountPaise);
@@ -51,56 +61,179 @@ router.post("/create-order", async (req, res) => {
       paise = n;
     } else {
       paise = toPaiseFromInput(amount);
-      if (!paise) return res.status(400).json({ error: "Invalid amount. Send 'amount' in rupees (e.g. 99.50) or 'amountPaise' as integer." });
+      if (!paise) {
+        return res.status(400).json({ error: "Invalid amount. Send 'amount' in rupees (e.g. 99.50) or 'amountPaise' as integer." });
+      }
     }
 
-    // Create unique merchantOrderId and build redirect/callback URLs from env (use HTTPS in prod)
+    // merchantOrderId and URLs
     const merchantOrderId = randomUUID();
-    const frontBase = process.env.FRONTEND_BASE || "http://localhost:5173";
-    const serverBase = process.env.REACT_APP_API_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const frontBase = (process.env.FRONTEND_BASE || "http://localhost:5173").replace(/\/$/, "");
+    // Use SERVER_BASE (not REACT_APP...); fallback to current host
+    const serverBase = (process.env.SERVER_BASE || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, "");
 
-    const redirectUrl = `${frontBase.replace(/\/$/, "")}/payment-result?merchantOrderId=${merchantOrderId}`;
-    const callbackUrl = `${serverBase.replace(/\/$/, "")}/phonepe-callback`;
+    const redirectUrl = `${frontBase}/payment-result?merchantOrderId=${merchantOrderId}`;
+    const callbackUrl = `${serverBase}/phonepe-callback`;
 
-    // TODO: Persist order to DB with status CREATED before calling PhonePe (important for reconciliation)
+    // TODO: Persist order to DB with status CREATED before calling PhonePe
     // await db.insertOrder({ merchantOrderId, jobId, amountPaise: paise, status: 'CREATED', createdAt: new Date() });
 
-    // Build PhonePe SDK request (amount must be in paise)
-    const request = StandardCheckoutPayRequest.builder()
+    // Build request
+    const builder = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantOrderId)
       .amount(paise)
-      .redirectUrl(redirectUrl)
-      // .callbackUrl(callbackUrl) // uncomment if SDK supports callbackUrl property and you want PhonePe to POST callbacks
-      .build();
+      .redirectUrl(redirectUrl);
+    // optionally: builder.callbackUrl(callbackUrl) if SDK supports it
+
+    // Add optional fields safely if builder supports them
+    if (title && typeof builder.orderNote === "function") {
+      try { builder.orderNote(title); } catch (e) { /* ignore if not supported */ }
+    }
+
+    const request = builder.build();
 
     // Call PhonePe
-    const response = await client.pay(request);
+    let response;
+    try {
+      response = await client.pay(request);
+    } catch (sdkErr) {
+      console.error("PhonePe SDK call failed:", sdkErr?.message || sdkErr);
+      // If axios-like error, log response details safely
+      if (sdkErr?.response) {
+        console.error("PhonePe response status:", sdkErr.response.status);
+        console.error("PhonePe response headers:", sdkErr.response.headers);
+        try {
+          console.error("PhonePe response body:", JSON.stringify(sdkErr.response.data, null, 2));
+        } catch (e) {
+          console.error("PhonePe response body (raw):", sdkErr.response.data);
+        }
+      }
+      return res.status(502).json({ error: "Payment provider error", details: sdkErr?.message || null });
+    }
 
-    // SDK may return redirectUrl or redirect_url depending on version
     const paymentUrl = response?.redirectUrl || response?.redirect_url || response?.checkoutPageUrl || null;
     if (!paymentUrl) {
       console.error("PhonePe SDK returned unexpected response while creating order:", response);
-      return res.status(500).json({ error: "Failed to create checkout session" });
+      return res.status(502).json({ error: "Failed to create checkout session", details: "unexpected SDK response" });
     }
 
-    // Return consistent shape to frontend
-    return res.json({ paymentUrl, merchantOrderId });
+    // success
+    return res.status(201).json({ paymentUrl, merchantOrderId });
   } catch (err) {
-    // Log verbose details to diagnose 400 responses from PhonePe
-    console.error("Error creating order:", err);
-    // If SDK throws an axios-like error with response body, print it
-    if (err?.response) {
-      console.error("PhonePe status:", err.response.status);
-      console.error("PhonePe headers:", err.response.headers);
-      console.error("PhonePe body:", JSON.stringify(err.response.data, null, 2));
-    } else if (err?.message) {
-      console.error("Error message:", err.message);
-    }
-    return res.status(500).json({ error: "Error creating order", details: err?.message || String(err) });
+    // last-resort error logging
+    console.error("Unhandled create-order error:", err?.message || err);
+    if (err?.stack) console.error(err.stack);
+    // avoid leaking secrets to client
+    return res.status(500).json({ error: "Error creating order", details: err?.message || null });
   }
 });
 
 export default router;
+
+
+// // backend/routes/paymentRoutes.js
+// import express from "express";
+// import { randomUUID } from "crypto";
+// import dotenv from "dotenv";
+// import { StandardCheckoutClient, Env, StandardCheckoutPayRequest } from "pg-sdk-node";
+
+// dotenv.config();
+
+// const router = express.Router();
+
+// // Validate required env early (will throw if missing)
+// const clientID = process.env.CLIENT_ID;
+// const clientSecret = process.env.CLIENT_SECRET;
+// const clientVersion = 1;
+// const SDK_ENV = (process.env.NODE_ENV === "production") ? Env.PRODUCTION : Env.SANDBOX;
+
+// if (!clientID || !clientSecret) {
+//   console.error("Missing CLIENT_ID or CLIENT_SECRET in env. Payment routes will fail until these are provided.");
+// }
+
+// // Init PhonePe SDK client
+// const client = StandardCheckoutClient.getInstance(clientID, clientSecret, clientVersion, SDK_ENV);
+
+// // Helper: convert rupees -> paise (canonical server-side)
+// function toPaiseFromInput(amountOrPaise) {
+//   // Accept either:
+//   //  - { amount: 99.50 }  -> rupees (float)  OR
+//   //  - { amountPaise: 9950 } -> paise (int)
+//   if (amountOrPaise === undefined || amountOrPaise === null) return null;
+//   const n = Number(amountOrPaise);
+//   if (!Number.isFinite(n) || n <= 0) return null;
+//   // Heuristic: If value is integer and small (< 1000000), treat as rupees (e.g., 1100 => ₹1100).
+//   // But we will assume caller sends rupees normally. Always convert rupees -> paise by multiplying by 100.
+//   // If you want to support raw paise field, use 'amountPaise' in body and handle explicitly.
+//   return Math.round(n * 100);
+// }
+
+// // Create order route
+// router.post("/create-order", async (req, res) => {
+//   try {
+//     // Expect body: { amount: 99.50, currency: "INR", jobId?, title? }
+//     const { amount, amountPaise, jobId, title } = req.body;
+
+//     // Accept either explicit amountPaise OR amount (rupees). Prefer explicit paise if provided.
+//     let paise;
+//     if (amountPaise !== undefined && amountPaise !== null) {
+//       const n = Number(amountPaise);
+//       if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+//         return res.status(400).json({ error: "Invalid amountPaise" });
+//       }
+//       paise = n;
+//     } else {
+//       paise = toPaiseFromInput(amount);
+//       if (!paise) return res.status(400).json({ error: "Invalid amount. Send 'amount' in rupees (e.g. 99.50) or 'amountPaise' as integer." });
+//     }
+
+//     // Create unique merchantOrderId and build redirect/callback URLs from env (use HTTPS in prod)
+//     const merchantOrderId = randomUUID();
+//     const frontBase = process.env.FRONTEND_BASE || "http://localhost:5173";
+//     const serverBase = process.env.REACT_APP_API_URL || `http://localhost:${process.env.PORT || 5000}`;
+
+//     const redirectUrl = `${frontBase.replace(/\/$/, "")}/payment-result?merchantOrderId=${merchantOrderId}`;
+//     const callbackUrl = `${serverBase.replace(/\/$/, "")}/phonepe-callback`;
+
+//     // TODO: Persist order to DB with status CREATED before calling PhonePe (important for reconciliation)
+//     // await db.insertOrder({ merchantOrderId, jobId, amountPaise: paise, status: 'CREATED', createdAt: new Date() });
+
+//     // Build PhonePe SDK request (amount must be in paise)
+//     const request = StandardCheckoutPayRequest.builder()
+//       .merchantOrderId(merchantOrderId)
+//       .amount(paise)
+//       .redirectUrl(redirectUrl)
+//       // .callbackUrl(callbackUrl) // uncomment if SDK supports callbackUrl property and you want PhonePe to POST callbacks
+//       .build();
+
+//     // Call PhonePe
+//     const response = await client.pay(request);
+
+//     // SDK may return redirectUrl or redirect_url depending on version
+//     const paymentUrl = response?.redirectUrl || response?.redirect_url || response?.checkoutPageUrl || null;
+//     if (!paymentUrl) {
+//       console.error("PhonePe SDK returned unexpected response while creating order:", response);
+//       return res.status(500).json({ error: "Failed to create checkout session" });
+//     }
+
+//     // Return consistent shape to frontend
+//     return res.json({ paymentUrl, merchantOrderId });
+//   } catch (err) {
+//     // Log verbose details to diagnose 400 responses from PhonePe
+//     console.error("Error creating order:", err);
+//     // If SDK throws an axios-like error with response body, print it
+//     if (err?.response) {
+//       console.error("PhonePe status:", err.response.status);
+//       console.error("PhonePe headers:", err.response.headers);
+//       console.error("PhonePe body:", JSON.stringify(err.response.data, null, 2));
+//     } else if (err?.message) {
+//       console.error("Error message:", err.message);
+//     }
+//     return res.status(500).json({ error: "Error creating order", details: err?.message || String(err) });
+//   }
+// });
+
+// export default router;
 
 
 // // backend/routes/paymentRoutes.js
