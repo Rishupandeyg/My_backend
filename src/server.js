@@ -32,6 +32,7 @@ const __dirname = path.dirname(__filename);
 const allowedOrigins = [
   "http://localhost:5173",
   "https://kbtalentbridgestudios.com",
+    "https://www.kbtalentbridgestudios.com",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
