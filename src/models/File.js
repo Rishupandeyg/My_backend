@@ -5,7 +5,7 @@ const FileSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, refPath: "userType" },
     userType: { type: String, required: true, enum: ["Candidate", "Employer", "Admin"] },
 
-    fileType: { type: String, required: true, enum: ["photo", "resume", "audio", "video"] },
+    fileType: { type: String, required: true, enum: ["photo", "document", "audio", "video"] },
     originalName: { type: String, required: true },
     fileName: { type: String },    // Cloudinary public_id (optional)
     url: { type: String, required: true }, // Cloudinary secure_url

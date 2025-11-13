@@ -33,7 +33,7 @@ const auth = async (req, res, next) => {
 
     console.log("AUTH DEBUG: resolved req.user ->", req.user);
 
-    // ✅ Check user existence based on role (keeps original behavior: returns 404 if user missing)
+    // Check user existence based on role (keeps original behavior: returns 404 if user missing)
     if (req.user.role === "candidate") {
       const candidate = await Candidate.findById(req.user.id);
       if (!candidate) {
@@ -80,7 +80,7 @@ export const authorizeRoles = (...roles) => {
   };
 };
 
-// ✅ Paid candidate check helper (unchanged)
+// Paid candidate check helper (unchanged)
 export const checkPaidCandidate = async (req, res, next) => {
   if (req.user.role !== "candidate") {
     return res.status(403).json({ message: "Access denied: candidates only" });
