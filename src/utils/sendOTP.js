@@ -1,65 +1,54 @@
 // src/utils/sendOTP.js
-import nodemailer from "nodemailer";
+import sgMail from "@sendgrid/mail";
 
-// Load environment variables
-const {
-  SMTP_HOST,
-  SMTP_PORT,
-  SMTP_USER,
-  SMTP_PASS,
-  SMTP_FROM
-} = process.env;
+const { SENDGRID_API_KEY, SENDER_EMAIL } = process.env;
 
-// Create transporter only if SMTP variables exist
-let transporter = null;
-
-if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT) || 465,
-    secure: Number(SMTP_PORT) === 465, // true for 465, false for 587
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-  });
-
-  console.log("[sendOTP] SMTP transporter initialized");
+if (!SENDGRID_API_KEY) {
+  console.warn("[sendOTP] ⚠️ SENDGRID_API_KEY not set — emails will be logged only (dev mode).");
 } else {
-  console.warn("[sendOTP] ⚠️ SMTP not configured — OTP will NOT be sent to email");
+  sgMail.setApiKey(SENDGRID_API_KEY);
+  console.log("[sendOTP] SendGrid initialized");
 }
 
-// ===============================
-// EMAIL OTP FUNCTION
-// ===============================
+/**
+ * sendEmailOTP(email, otp)
+ * - Uses SendGrid API if SENDGRID_API_KEY present
+ * - Falls back to console.log in dev mode
+ */
 export async function sendEmailOTP(email, otp) {
-  if (!transporter) {
-    console.log(`[sendEmailOTP] (DEV MODE) to=${email} otp=${otp}`);
+  if (!SENDGRID_API_KEY) {
+    console.log(`[sendEmailOTP DEV] to=${email} otp=${otp}`);
     return true;
   }
+
+  const msg = {
+    to: email,
+    from: SENDER_EMAIL || "no-reply@yourdomain.com", // must be a verified sender in SendGrid
+    subject: "Your verification code",
+    text: `Your OTP is: ${otp}. It expires in 10 minutes.`,
+    html: `<p>Your OTP is: <strong>${otp}</strong></p><p>This code expires in 10 minutes.</p>`,
+  };
 
   try {
-    const info = await transporter.sendMail({
-      from: SMTP_FROM || SMTP_USER,
-      to: email,
-      subject: "Your OTP Verification Code",
-      text: `Your OTP is: ${otp}`,
-      html: `<p>Your OTP is: <b>${otp}</b></p>`,
-    });
-
-    console.log("[sendEmailOTP] Sent:", info.messageId);
+    const res = await sgMail.send(msg);
+    // res is an array of responses for each recipient; statusCode usually 202
+    console.log("[sendEmailOTP] SendGrid response:", res && res[0] && res[0].statusCode);
     return true;
   } catch (err) {
-    console.error("[sendEmailOTP ERROR]", err);
-    return false;
+    // SendGrid returns useful error info in err.response.body
+    if (err && err.response && err.response.body) {
+      console.error("[sendEmailOTP] SendGrid error body:", JSON.stringify(err.response.body));
+    } else {
+      console.error("[sendEmailOTP] SendGrid error:", err);
+    }
+    throw err;
   }
 }
 
-// ===============================
-// MOBILE OTP (still dev mode)
-// ===============================
+/**
+ * sendSmsOTP still left as dev fallback (we're email-only)
+ */
 export async function sendSmsOTP(mobile, otp) {
-  // No SMS API connected — just log
-  console.log(`[sendSmsOTP] (DEV MODE) to=${mobile} otp=${otp}`);
+  console.log(`[sendSmsOTP DEV] to=${mobile} otp=${otp}`);
   return true;
 }
