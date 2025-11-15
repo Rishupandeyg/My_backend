@@ -199,8 +199,7 @@
 
 
 
-
-// routes/authRoutes.js
+// src/routes/authRoutes.js
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -209,9 +208,9 @@ import { v4 as uuidv4 } from "uuid";
 import Candidate from "../models/Candidate.js";
 import Employer from "../models/Employer.js";
 import Admin from "../models/Admin.js";
-import Verification from "../models/Verification.js"; // new model
+import Verification from "../models/Verification.js";
 import { generateOTP } from "../utils/otp.js";
-import { sendEmailOTP, sendSmsOTP } from "../utils/sendOTP.js";
+import { sendEmailOTP } from "../utils/sendOTP.js"; // email-only
 
 const router = express.Router();
 
@@ -222,16 +221,18 @@ const generateToken = (user, role) => {
   });
 };
 
-// helper: create verification record and send otp
-async function createAndSendVerification({ type, value }) {
+// helper: create verification record and send otp (EMAIL only)
+async function createAndSendVerification({ value }) {
+  if (!value) throw new Error("Email value required for verification");
+
   const otp = generateOTP();
   const hashedOtp = await bcrypt.hash(String(otp), 10);
   const verificationId = uuidv4();
-  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
   await Verification.create({
     verificationId,
-    type,
+    type: "email",
     value,
     otp: hashedOtp,
     expiresAt,
@@ -239,11 +240,7 @@ async function createAndSendVerification({ type, value }) {
     used: false,
   });
 
-  if (type === "email") {
-    await sendEmailOTP(value, otp);
-  } else {
-    await sendSmsOTP(value, otp);
-  }
+  await sendEmailOTP(value, otp);
 
   return verificationId;
 }
@@ -292,18 +289,12 @@ router.post("/register/candidate", async (req, res) => {
 
     await candidate.save();
 
-    // Create verification record and send OTP to email (and/or mobile if provided)
-    const verificationId = await createAndSendVerification({ type: "email", value: email });
+    // Create verification record and send OTP to email
+    const verificationId = await createAndSendVerification({ value: email });
 
-    // optionally also send mobile OTP if mobile provided:
-    if (mobile) {
-      // create separate verification record for mobile (optional)
-      await createAndSendVerification({ type: "mobile", value: mobile });
-    }
-
-    res.status(201).json({ message: "Candidate registered. OTP sent.", verificationId });
+    res.status(201).json({ message: "Candidate registered. OTP sent to email.", verificationId });
   } catch (error) {
-    console.error(error);
+    console.error("register/candidate error:", error);
     res.status(500).json({ message: "Server error", error: error.message || error });
   }
 });
@@ -356,32 +347,28 @@ router.post("/register/employer", async (req, res) => {
 
     await employer.save();
 
-    // send OTP to email (and mobile if present)
-    const verificationId = await createAndSendVerification({ type: "email", value: email });
-    if (mobile) {
-      await createAndSendVerification({ type: "mobile", value: mobile });
-    }
+    // send OTP to email
+    const verificationId = await createAndSendVerification({ value: email });
 
-    res.status(201).json({ message: "Employer registered. OTP sent.", verificationId });
+    res.status(201).json({ message: "Employer registered. OTP sent to email.", verificationId });
   } catch (error) {
-    console.error(error);
+    console.error("register/employer error:", error);
     res.status(500).json({ message: "Server error", error: error.message || error });
   }
 });
 
 // ==========================
-// Send OTP (generic)
-// ==========================
+// Send OTP (email only)
 // POST /send-otp
-// body: { type: 'email'|'mobile', value: '<email-or-mobile>' }
+// body: { type: 'email', value: '<email>' }
 router.post("/send-otp", async (req, res) => {
   try {
     const { type, value } = req.body;
-    if (!type || !value || !["email", "mobile"].includes(type))
-      return res.status(400).json({ message: "Invalid type or value" });
+    if (type !== "email" || !value)
+      return res.status(400).json({ message: "Only email OTP supported. Provide type: 'email' and value: '<email>'" });
 
-    const verificationId = await createAndSendVerification({ type, value });
-    res.json({ message: "OTP sent", verificationId });
+    const verificationId = await createAndSendVerification({ value });
+    res.json({ message: "OTP sent to email", verificationId });
   } catch (err) {
     console.error("send-otp error:", err);
     res.status(500).json({ message: "Server error", error: err.message || err });
@@ -390,28 +377,28 @@ router.post("/send-otp", async (req, res) => {
 
 // ==========================
 // Verify OTP
-// ==========================
 // POST /verify-otp
-// body: { type?, value?, otp, verificationId? }
-// you can provide verificationId OR (type + value + otp)
+// body: { type?: 'email', value?: '<email>', otp: '123456', verificationId?: '<id>' }
 router.post("/verify-otp", async (req, res) => {
   try {
     const { type, value, otp, verificationId } = req.body;
     if (!otp) return res.status(400).json({ message: "OTP required" });
 
+    // allow verify by verificationId or by type + value (email)
     let query = {};
     if (verificationId) {
       query = { verificationId };
     } else {
-      if (!type || !value) return res.status(400).json({ message: "Provide type and value or verificationId" });
-      query = { type, value };
+      if (type !== "email" || !value) {
+        return res.status(400).json({ message: "Provide type:'email' and value:'<email>' or verificationId" });
+      }
+      query = { type: "email", value };
     }
 
-    // get latest matching verification record
     const ver = await Verification.findOne(query).sort({ createdAt: -1 });
     if (!ver) return res.status(400).json({ message: "Verification record not found" });
     if (ver.used) return res.status(400).json({ message: "OTP already used" });
-    if (ver.expiresAt < Date.now()) return res.status(400).json({ message: "OTP expired" });
+    if (ver.expiresAt < new Date()) return res.status(400).json({ message: "OTP expired" });
 
     const MAX_ATTEMPTS = 5;
     if ((ver.attempts || 0) >= MAX_ATTEMPTS) return res.status(429).json({ message: "Too many attempts" });
@@ -428,30 +415,16 @@ router.post("/verify-otp", async (req, res) => {
     await ver.save();
 
     // Mark the corresponding user (Candidate or Employer) as verified if present
-    if (ver.type === "email") {
-      // try find by email in candidate or employer
-      let user = await Candidate.findOne({ email: ver.value });
+    const emailValue = ver.value;
+    let user = await Candidate.findOne({ email: emailValue });
+    if (user) {
+      user.isVerified = true;
+      await user.save();
+    } else {
+      user = await Employer.findOne({ email: emailValue });
       if (user) {
         user.isVerified = true;
         await user.save();
-      } else {
-        user = await Employer.findOne({ email: ver.value });
-        if (user) {
-          user.isVerified = true;
-          await user.save();
-        }
-      }
-    } else if (ver.type === "mobile") {
-      let user = await Candidate.findOne({ mobile: ver.value });
-      if (user) {
-        user.isVerified = true;
-        await user.save();
-      } else {
-        user = await Employer.findOne({ mobile: ver.value });
-        if (user) {
-          user.isVerified = true;
-          await user.save();
-        }
       }
     }
 
@@ -481,7 +454,7 @@ router.post("/login", async (req, res) => {
 
     if (!user) return res.status(400).json({ message: "User not found" });
 
-    if (!user.isVerified) return res.status(403).json({ message: "Verify account first" });
+    if (!user.isVerified) return res.status(403).json({ message: "Verify account first (check your email for OTP)" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
@@ -508,7 +481,7 @@ router.post("/login", async (req, res) => {
             },
     });
   } catch (error) {
-    console.error(error);
+    console.error("login error:", error);
     res.status(500).json({ message: "Server error", error });
   }
 });

@@ -142,7 +142,6 @@
 // };
 
 
-
 // src/controllers/authController.js
 const User = require("../models/User");
 const Verification = require("../models/Verification");
@@ -151,22 +150,22 @@ const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 
 const { generateOTP } = require("../utils/otp");
-const { sendEmailOTP, sendSmsOTP } = require("../utils/sendOTP");
+const { sendEmailOTP } = require("../utils/sendOTP");
 
 const generateToken = (user) => {
   const payload = { user: { id: user.id, role: user.role } };
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || "1d" });
 };
 
-// ------------ Register (unchanged behavior, but now uses helpers) ------------
+// ------------ Register (email-only OTP) ------------
 exports.register = async (req, res, next) => {
   try {
     const { name, email, mobile, password, role } = req.body;
 
-    if (!email && !mobile) return res.status(400).json({ msg: "Provide email or mobile" });
+    if (!email) return res.status(400).json({ msg: "Provide email" });
     if (!password) return res.status(400).json({ msg: "Password is required" });
 
-    let user = await User.findOne({ $or: [{ email }, { mobile }] });
+    let user = await User.findOne({ email });
     if (user) return res.status(400).json({ msg: "User already exists" });
 
     const hash = await bcrypt.hash(password, 10);
@@ -186,49 +185,48 @@ exports.register = async (req, res, next) => {
 
     // create verification record (so frontend can verify via verificationId)
     const verificationId = uuidv4();
-    const hashedOtp = await bcrypt.hash(otp, 10);
-    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const hashedOtp = await bcrypt.hash(String(otp), 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes (Date)
 
     await Verification.create({
       verificationId,
-      type: email ? "email" : "mobile",
-      value: email ?? mobile,
+      type: "email",
+      value: email,
       otp: hashedOtp,
-      expiresAt: expiry,
+      expiresAt,
       attempts: 0,
       used: false,
     });
 
-    // send OTP via appropriate channel
-    if (email) await sendEmailOTP(email, otp);
-    else if (mobile) await sendSmsOTP(mobile, otp);
+    // send OTP via email
+    await sendEmailOTP(email, otp);
 
-    return res.status(201).json({ msg: "User registered. OTP sent.", verificationId });
+    return res.status(201).json({ msg: "User registered. OTP sent to email.", verificationId });
   } catch (err) {
     next(err);
   }
 };
 
-// ------------ Send OTP (generic) ------------
+// ------------ Send OTP (email-only) ------------
 // POST /auth/send-otp
-// body: { type: 'email'|'mobile', value: '...', role?: 'candidate'|'employer' }
+// body: { type: 'email', value: '...', role?: 'candidate'|'employer' }
 // returns: { msg, verificationId }
 exports.sendOtp = async (req, res, next) => {
   try {
     const { type, value } = req.body;
     if (!type || !value) return res.status(400).json({ msg: "Missing type or value" });
-    if (!["email", "mobile"].includes(type)) return res.status(400).json({ msg: "Invalid type" });
+    if (type !== "email") return res.status(400).json({ msg: "Only 'email' OTP is supported" });
 
     // generate fresh OTP and hashed version
     const otp = generateOTP();
-    const hashedOtp = await bcrypt.hash(otp, 10);
+    const hashedOtp = await bcrypt.hash(String(otp), 10);
     const verificationId = uuidv4();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes (Date)
 
     // Save verification record (one per verificationId)
     await Verification.create({
       verificationId,
-      type,
+      type: "email",
       value,
       otp: hashedOtp,
       expiresAt,
@@ -236,34 +234,31 @@ exports.sendOtp = async (req, res, next) => {
       used: false,
     });
 
-    // send via email or sms
-    if (type === "email") {
-      await sendEmailOTP(value, otp);
-    } else {
-      await sendSmsOTP(value, otp);
-    }
+    // send via email
+    await sendEmailOTP(value, otp);
 
-    return res.json({ msg: "OTP sent", verificationId });
+    return res.json({ msg: "OTP sent to email", verificationId });
   } catch (err) {
     next(err);
   }
 };
 
-// ------------ Verify OTP ------------
+// ------------ Verify OTP (email-only) ------------
 // POST /auth/verify-otp
-// body: { type, value, otp, verificationId? }
+// body: { type?: 'email', value?: '<email>', otp: '123456', verificationId?: '<id>' }
 // returns 200 if valid
 exports.verifyOtp = async (req, res, next) => {
   try {
     const { type, value, otp, verificationId } = req.body;
-    if (!type || !value || !otp) return res.status(400).json({ msg: "Missing fields" });
+    if (!otp) return res.status(400).json({ msg: "OTP required" });
 
+    // If verificationId provided, lookup by it; otherwise require email
     let query = {};
     if (verificationId) {
       query = { verificationId };
     } else {
-      // find latest matching verification record for type+value
-      query = { type, value };
+      if (type !== "email" || !value) return res.status(400).json({ msg: "Provide type:'email' and value:'<email>' or verificationId" });
+      query = { type: "email", value };
     }
 
     // find the most recent matching verification (if multiple, pick newest)
@@ -271,11 +266,11 @@ exports.verifyOtp = async (req, res, next) => {
 
     if (!ver) return res.status(400).json({ msg: "Verification record not found" });
     if (ver.used) return res.status(400).json({ msg: "OTP already used" });
-    if (ver.expiresAt < Date.now()) return res.status(400).json({ msg: "OTP expired" });
+    if (ver.expiresAt < new Date()) return res.status(400).json({ msg: "OTP expired" });
 
     // throttle attempts
     const MAX_ATTEMPTS = 5;
-    if (ver.attempts >= MAX_ATTEMPTS) return res.status(429).json({ msg: "Too many attempts" });
+    if ((ver.attempts || 0) >= MAX_ATTEMPTS) return res.status(429).json({ msg: "Too many attempts" });
 
     const match = await bcrypt.compare(String(otp), ver.otp);
     if (!match) {
@@ -288,9 +283,8 @@ exports.verifyOtp = async (req, res, next) => {
     ver.used = true;
     await ver.save();
 
-    // if there's an existing user with this email/mobile, mark user verified
-    const userQuery = type === "mobile" ? { mobile: value } : { email: value };
-    const user = await User.findOne(userQuery);
+    // if there's an existing user with this email, mark user verified
+    const user = await User.findOne({ email: ver.value });
     if (user) {
       user.isVerified = true;
       // clear any otp fields in user doc if you were using them
