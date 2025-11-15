@@ -198,7 +198,6 @@
 
 
 
-
 // src/routes/authRoutes.js
 import express from "express";
 import bcrypt from "bcryptjs";
@@ -222,7 +221,8 @@ const generateToken = (user, role) => {
 };
 
 // helper: create verification record and send otp (EMAIL only)
-async function createAndSendVerification({ value }) {
+// NOTE: will throw if sendEmailOTP fails — caller should handle rollback if needed
+async function createVerificationRecord({ value }) {
   if (!value) throw new Error("Email value required for verification");
 
   const otp = generateOTP();
@@ -230,7 +230,7 @@ async function createAndSendVerification({ value }) {
   const verificationId = uuidv4();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  await Verification.create({
+  const ver = await Verification.create({
     verificationId,
     type: "email",
     value,
@@ -240,7 +240,8 @@ async function createAndSendVerification({ value }) {
     used: false,
   });
 
-  await sendEmailOTP(value, otp);
+  // attempt to send email
+  await sendEmailOTP(value, otp); // may throw
 
   return verificationId;
 }
@@ -263,13 +264,16 @@ router.post("/register/candidate", async (req, res) => {
       password,
     } = req.body;
 
-    if (!firstName || !lastName || !email || !password)
-      return res.status(400).json({ message: "Required fields missing" });
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ message: "Required fields missing: firstName, lastName, email, password" });
+    }
 
-    const existingCandidate = await Candidate.findOne({ email });
-    const existingEmployer = await Employer.findOne({ email });
-    if (existingCandidate || existingEmployer)
+    // duplicate check
+    const existingCandidate = await Candidate.findOne({ email }).lean();
+    const existingEmployer = await Employer.findOne({ email }).lean();
+    if (existingCandidate || existingEmployer) {
       return res.status(400).json({ message: "Email already registered" });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -284,18 +288,38 @@ router.post("/register/candidate", async (req, res) => {
       state,
       email,
       password: hashedPassword,
-      isVerified: false, // not verified until OTP verification
+      isVerified: false,
     });
 
     await candidate.save();
 
     // Create verification record and send OTP to email
-    const verificationId = await createAndSendVerification({ value: email });
+    try {
+      const verificationId = await createVerificationRecord({ value: email });
+      return res.status(201).json({ message: "Candidate registered. OTP sent to email.", verificationId });
+    } catch (sendErr) {
+      // rollback created candidate to avoid orphan unverified accounts
+      try {
+        await Candidate.deleteOne({ _id: candidate._id });
+        console.error("[register/candidate] Rolled back candidate due to OTP send failure");
+      } catch (delErr) {
+        console.error("[register/candidate] Failed to rollback candidate:", delErr);
+      }
 
-    res.status(201).json({ message: "Candidate registered. OTP sent to email.", verificationId });
+      console.error("[register/candidate] sendEmailOTP error:", sendErr);
+      // Distinguish send errors if possible
+      const errMsg = sendErr?.response?.body ? JSON.stringify(sendErr.response.body) : sendErr.message || String(sendErr);
+      return res.status(502).json({ message: "Failed to send OTP email. Registration aborted.", error: errMsg });
+    }
   } catch (error) {
     console.error("register/candidate error:", error);
-    res.status(500).json({ message: "Server error", error: error.message || error });
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ message: "Validation error", details: error.message });
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Duplicate key error", details: error.keyValue });
+    }
+    return res.status(500).json({ message: "Server error", error: error.message || String(error) });
   }
 });
 
@@ -319,13 +343,15 @@ router.post("/register/employer", async (req, res) => {
       vacancy,
     } = req.body;
 
-    if (!companyName || !email || !password)
-      return res.status(400).json({ message: "Required fields missing" });
+    if (!companyName || !email || !password) {
+      return res.status(400).json({ message: "Required fields missing: companyName, email, password" });
+    }
 
-    const existingEmployer = await Employer.findOne({ email });
-    const existingCandidate = await Candidate.findOne({ email });
-    if (existingEmployer || existingCandidate)
+    const existingEmployer = await Employer.findOne({ email }).lean();
+    const existingCandidate = await Candidate.findOne({ email }).lean();
+    if (existingEmployer || existingCandidate) {
       return res.status(400).json({ message: "Email already registered" });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -347,13 +373,31 @@ router.post("/register/employer", async (req, res) => {
 
     await employer.save();
 
-    // send OTP to email
-    const verificationId = await createAndSendVerification({ value: email });
+    try {
+      const verificationId = await createVerificationRecord({ value: email });
+      return res.status(201).json({ message: "Employer registered. OTP sent to email.", verificationId });
+    } catch (sendErr) {
+      // rollback employer
+      try {
+        await Employer.deleteOne({ _id: employer._id });
+        console.error("[register/employer] Rolled back employer due to OTP send failure");
+      } catch (delErr) {
+        console.error("[register/employer] Failed to rollback employer:", delErr);
+      }
 
-    res.status(201).json({ message: "Employer registered. OTP sent to email.", verificationId });
+      console.error("[register/employer] sendEmailOTP error:", sendErr);
+      const errMsg = sendErr?.response?.body ? JSON.stringify(sendErr.response.body) : sendErr.message || String(sendErr);
+      return res.status(502).json({ message: "Failed to send OTP email. Registration aborted.", error: errMsg });
+    }
   } catch (error) {
     console.error("register/employer error:", error);
-    res.status(500).json({ message: "Server error", error: error.message || error });
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ message: "Validation error", details: error.message });
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Duplicate key error", details: error.keyValue });
+    }
+    return res.status(500).json({ message: "Server error", error: error.message || String(error) });
   }
 });
 
@@ -367,11 +411,12 @@ router.post("/send-otp", async (req, res) => {
     if (type !== "email" || !value)
       return res.status(400).json({ message: "Only email OTP supported. Provide type: 'email' and value: '<email>'" });
 
-    const verificationId = await createAndSendVerification({ value });
-    res.json({ message: "OTP sent to email", verificationId });
+    const verificationId = await createVerificationRecord({ value });
+    return res.json({ message: "OTP sent to email", verificationId });
   } catch (err) {
     console.error("send-otp error:", err);
-    res.status(500).json({ message: "Server error", error: err.message || err });
+    const errMsg = err?.response?.body ? JSON.stringify(err.response.body) : err.message || String(err);
+    return res.status(502).json({ message: "Failed to send OTP", error: errMsg });
   }
 });
 
@@ -384,7 +429,6 @@ router.post("/verify-otp", async (req, res) => {
     const { type, value, otp, verificationId } = req.body;
     if (!otp) return res.status(400).json({ message: "OTP required" });
 
-    // allow verify by verificationId or by type + value (email)
     let query = {};
     if (verificationId) {
       query = { verificationId };
@@ -407,10 +451,10 @@ router.post("/verify-otp", async (req, res) => {
     if (!match) {
       ver.attempts = (ver.attempts || 0) + 1;
       await ver.save();
-      return res.status(400).json({ message: "Invalid OTP" });
+      const attemptsLeft = Math.max(0, MAX_ATTEMPTS - ver.attempts);
+      return res.status(400).json({ message: "Invalid OTP", attemptsLeft });
     }
 
-    // mark verification used
     ver.used = true;
     await ver.save();
 
@@ -431,7 +475,7 @@ router.post("/verify-otp", async (req, res) => {
     return res.json({ message: "Verified" });
   } catch (err) {
     console.error("verify-otp error:", err);
-    res.status(500).json({ message: "Server error", error: err.message || err });
+    return res.status(500).json({ message: "Server error", error: err.message || err });
   }
 });
 
