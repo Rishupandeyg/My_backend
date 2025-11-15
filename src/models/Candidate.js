@@ -27,13 +27,13 @@ const candidateSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
 
-    // ✅ Cloudinary URLs for main files
+    //  Cloudinary URLs for main files
     photoUrl: String,      // profile picture
     resumeUrl: String,     // resume file
     audioUrl: String,      // audio file (max 1 min)
     videoUrl: String,      // video file (max 30 sec)
 
-    // ✅ Array for other uploads if needed
+    //  Array for other uploads if needed
     uploads: [uploadSchema], // additional uploads
   },
   { timestamps: true }
