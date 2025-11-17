@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import dotenv from "dotenv";
 import { StandardCheckoutClient, Env, StandardCheckoutPayRequest } from "pg-sdk-node";
 import Order from "../models/Order.js";
-import Job from "../models/Job.js";
+import Job from "../models/UserJob.js";
 import { generateJobID } from "../utils/generateJobId.js";
 
 dotenv.config();
