@@ -1,19 +1,9 @@
-// // src/models/Counter.js
-// import mongoose from "mongoose";
+// models/Counter.js
+import mongoose from "mongoose";
 
-// const CounterSchema = new mongoose.Schema({
-//   key: { type: String, required: true, unique: true },  // e.g. "visits", "applications", "uploads"
-//   value: { type: Number, default: 0 },
-// });
+const counterSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  value: { type: Number, default: 0 } // default 0 so first increment => 1
+}, { timestamps: true });
 
-// // atomic increment helper
-// CounterSchema.statics.increment = async function (key) {
-//   const updated = await this.findOneAndUpdate(
-//     { key },
-//     { $inc: { value: 1 } },
-//     { new: true, upsert: true }
-//   );
-//   return updated;
-// };
-
-// export default mongoose.model("Counter", CounterSchema);
+export default mongoose.model("Counter", counterSchema);
