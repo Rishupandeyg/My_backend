@@ -38,34 +38,34 @@ router.put("/profile", auth, async (req, res) => {
 });
 
 // Get a specific candidate's uploads
-router.get("/candidate/:id/uploads", auth, authorizeRoles("employer"), async (req, res) => {
-  try {
-    const candidate = await Candidate.findById(req.params.id).select(
-      "photoUrl resumeUrl videoUrl audioUrl uploads"
-    );
-    if (!candidate) return res.status(404).json({ msg: "Candidate not found" });
+// router.get("/candidate/:id/uploads", auth, authorizeRoles("employer"), async (req, res) => {
+//   try {
+//     const candidate = await Candidate.findById(req.params.id).select(
+//       "photoUrl resumeUrl videoUrl audioUrl uploads"
+//     );
+//     if (!candidate) return res.status(404).json({ msg: "Candidate not found" });
 
-    res.json({
-      photo: candidate.photoUrl,
-      resume: candidate.resumeUrl,
-      video: candidate.videoUrl,
-      audio: candidate.audioUrl,
-      uploads: candidate.uploads || [],
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+//     res.json({
+//       photo: candidate.photoUrl,
+//       resume: candidate.resumeUrl,
+//       video: candidate.videoUrl,
+//       audio: candidate.audioUrl,
+//       uploads: candidate.uploads || [],
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
-// GET all candidates (employer access)
-router.get("/candidates", auth, authorizeRoles("employer"), async (req, res) => {
-  try {
-    const candidates = await Candidate.find().select("-password");
-    res.json(candidates);
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
+// // GET all candidates (employer access)
+// router.get("/candidates", auth, authorizeRoles("employer"), async (req, res) => {
+//   try {
+//     const candidates = await Candidate.find().select("-password");
+//     res.json(candidates);
+//   } catch (err) {
+//     res.status(500).json({ message: "Server error", error: err.message });
+//   }
+// });
 
 export default router;
 
