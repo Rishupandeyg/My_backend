@@ -6,4 +6,5 @@ const newsAdminSchema = new mongoose.Schema({
   password: { type: String, required: true }
 });
 
-export default mongoose.model("NewsAdmin", newsAdminSchema);
+// Force collection name: "newsadmins"
+export default mongoose.model("NewsAdmin", newsAdminSchema, "newsadmins");
