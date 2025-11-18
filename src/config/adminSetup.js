@@ -19,12 +19,12 @@ const createAdmin = async () => {
         isVerified: true,
       });
       await admin.save();
-      console.log("✅ Admin account created");
+      console.log(" Admin account created");
     } else {
-      console.log("ℹ️ Admin already exists");
+      console.log("Admin already exists");
     }
   } catch (err) {
-    console.error("❌ Admin creation error:", err);
+    console.error(" Admin creation error:", err);
   }
 };
 

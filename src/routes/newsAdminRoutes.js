@@ -6,9 +6,8 @@ import NewsAdmin from "../models/NewsAdmin.js";
 
 const router = express.Router();
 
-/* -------------------------------------------------------
-   🔥 Create Default News Admin (Runs Only Once)
-------------------------------------------------------- */
+/* Create Default News Admin (Runs Only Once) */
+
 router.get("/create-default-admin", async (req, res) => {
   try {
     const exists = await NewsAdmin.findOne({ username: "newsadmin" });
@@ -45,9 +44,7 @@ router.get("/create-default-admin", async (req, res) => {
   }
 });
 
-/* -------------------------------------------------------
-   🔐 Admin Login
-------------------------------------------------------- */
+/* Admin Login */
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
