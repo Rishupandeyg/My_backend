@@ -23,8 +23,13 @@ router.get("/create-default-admin", async (req, res) => {
     const hashedPassword = await bcrypt.hash("news@123", 10);
 
     const admin = await NewsAdmin.create({
+      name: "News Admin",
       username: "newsadmin",
-      password: hashedPassword
+      email: "newsadmin@example.com",
+      mobile: "0000000000",
+      password: hashedPassword,
+      role: "news-admin",
+      isVerified: true
     });
 
     return res.json({
@@ -58,12 +63,22 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: admin._id },
+      { id: admin._id, role: admin.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    return res.json({ token });
+    return res.json({
+      msg: "Login successful",
+      token,
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        username: admin.username,
+        email: admin.email,
+        role: admin.role
+      }
+    });
 
   } catch (error) {
     res.status(500).json({

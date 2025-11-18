@@ -96,18 +96,6 @@ app.use("/api/payments", paymentRoutes); // real payments mounted at /api/paymen
 app.use("/news-admin", newsAdminRoutes);
 
 
-// if USE_MOCK, mount dev mock router dynamically at /api/payments/create-order (it will override)
-// if (process.env.USE_MOCK === "true") {
-//   (async () => {
-//     try {
-//       const { default: devMock } = await import("./routes/devMockRoutes.js");
-//       app.use("/api/payments", devMock);
-//       console.log("⚠️ Using mock payment routes (USE_MOCK=true)");
-//     } catch (err) {
-//       console.warn("⚠️ USE_MOCK=true but devMockRoutes import failed:", err?.message || err);
-//     }
-//   })();
-// }
 
 // health endpoint
 app.get("/health", (req, res) => res.json({ status: "ok", uptime: process.uptime() }));
