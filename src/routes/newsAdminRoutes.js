@@ -11,8 +11,8 @@ const router = express.Router();
 ------------------------------------------------------- */
 router.get("/create-default-admin", async (req, res) => {
   try {
-    // Check if admin already exists
     const exists = await NewsAdmin.findOne({ username: "newsadmin" });
+
     if (exists) {
       return res.json({
         msg: "Admin already exists",
@@ -20,7 +20,6 @@ router.get("/create-default-admin", async (req, res) => {
       });
     }
 
-    // Create new admin
     const hashedPassword = await bcrypt.hash("news@123", 10);
 
     const admin = await NewsAdmin.create({
@@ -64,7 +63,7 @@ router.post("/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.json({ token });
+    return res.json({ token });
 
   } catch (error) {
     res.status(500).json({
