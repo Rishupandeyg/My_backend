@@ -18,8 +18,10 @@ import contactRoutes from "./routes/contactRoutes.js";
 import adminJobRoutes from "./routes/adminJobRoutes.js";
 import jobCategoryRoutes from "./routes/jobCategoryRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js"; // real routes
+import newsAdminRoutes from "./routes/newsAdminRoutes.js";
 
 import createAdmin from "./config/adminSetup.js";
+
 import fileUpload from "express-fileupload";
 import { cloudinaryConnect } from "./config/cloudinary.js";
 
@@ -88,6 +90,10 @@ app.use("/api/contact", contactRoutes);
 app.use("/api/admin/jobs", adminJobRoutes);
 app.use("/api/jobcategories", jobCategoryRoutes);
 app.use("/api/payments", paymentRoutes); // real payments mounted at /api/payments
+
+
+app.use("/news-admin", newsAdminRoutes);
+
 
 // if USE_MOCK, mount dev mock router dynamically at /api/payments/create-order (it will override)
 // if (process.env.USE_MOCK === "true") {
