@@ -18,6 +18,7 @@ import contactRoutes from "./routes/contactRoutes.js";
 import adminJobRoutes from "./routes/adminJobRoutes.js";
 import jobCategoryRoutes from "./routes/jobCategoryRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js"; // real routes
+
 import newsAdminRoutes from "./routes/newsAdminRoutes.js";
 
 import createAdmin from "./config/adminSetup.js";
