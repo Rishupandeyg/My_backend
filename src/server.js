@@ -95,7 +95,7 @@ app.use("/api/admin/jobs", adminJobRoutes);
 app.use("/api/jobcategories", jobCategoryRoutes);
 app.use("/api/payments", paymentRoutes); // real payments mounted at /api/payments
 
-app.use("/api/orders", orderRoutes);",orderRoutes
+app.use("/api/orders", orderRoutes);
 
 
 app.use("/news-admin", newsAdminRoutes);
