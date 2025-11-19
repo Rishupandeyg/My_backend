@@ -1,13 +1,40 @@
-// models/Order.js
 import mongoose from "mongoose";
 
-const orderSchema = new mongoose.Schema({
-  merchantOrderId: { type: String, required: true, unique: true },
-  amountPaise: { type: Number, required: true },
-  status: { type: String, enum: ["CREATED","PENDING","SUCCESS","FAILED","REFUNDED"], default: "CREATED" },
-  paymentProviderData: { type: mongoose.Schema.Types.Mixed }, // raw provider response for audit
-  jobId: { type: String, default: null },
-  createdAt: { type: Date, default: Date.now }
-});
+const OrderSchema = new mongoose.Schema(
+  {
+    merchantOrderId: { type: String, required: true, unique: true },
 
-export default mongoose.model("Order", orderSchema);
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", // Candidate
+      required: false
+    },
+
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job", // Applied job
+      required: false
+    },
+
+    generatedJobId: {
+      type: String, // like KBTS-0001
+      required: false
+    },
+
+    amountPaise: { type: Number, required: true },
+
+    status: {
+      type: String,
+      enum: ["CREATED", "PENDING", "SUCCESS", "FAILED"],
+      default: "CREATED"
+    },
+
+    paymentProviderData: {
+      type: Object,
+      default: {},
+    },
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model("Order", OrderSchema);

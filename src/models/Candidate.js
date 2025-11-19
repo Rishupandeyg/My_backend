@@ -15,7 +15,7 @@ const uploadSchema = new mongoose.Schema(
 
 const candidateSchema = new mongoose.Schema(
   {
-    isPaid: { type: Boolean, default: false },
+    isPaid: { type: Boolean, default: false },  
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     dateOfBirth: { type: Date, required: true },
