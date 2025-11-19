@@ -20,6 +20,8 @@ import jobCategoryRoutes from "./routes/jobCategoryRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js"; // real routes
 
 import newsAdminRoutes from "./routes/newsAdminRoutes.js";
+import newsRoutes from "./routes/newsRoutes.js";
+
 
 import createAdmin from "./config/adminSetup.js";
 
@@ -94,6 +96,7 @@ app.use("/api/payments", paymentRoutes); // real payments mounted at /api/paymen
 
 
 app.use("/news-admin", newsAdminRoutes);
+app.use("/news", newsRoutes);
 
 
 
