@@ -6,18 +6,17 @@ const OrderSchema = new mongoose.Schema(
 
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // Candidate
+      ref: "User",
       required: false
     },
 
     jobId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Job", // Applied job
+      type: String,  // <-- KBTS-101 same as merchantOrderId
       required: false
     },
 
     generatedJobId: {
-      type: String, // like KBTS-0001
+      type: String,  // KBTS-101 also here
       required: false
     },
 
