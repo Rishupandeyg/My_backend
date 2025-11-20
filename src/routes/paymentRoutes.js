@@ -97,6 +97,7 @@ router.post("/create-order", async (req, res) => {
       merchantOrderId,
       generatedJobId: merchantOrderId,
       jobId: null,
+       userId: req.user?._id || null,   // <=== IMPORTANT NEW LINE
       amountPaise: paise,
       status: "CREATED",
       paymentProviderData: { requestedAt: new Date(), title },
