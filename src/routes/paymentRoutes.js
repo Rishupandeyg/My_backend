@@ -7,7 +7,7 @@ import {
 } from "pg-sdk-node";
 import Order from "../models/Order.js";
 import Candidate from "../models/Candidate.js";
-import PaidCandidate from "../models/PaidCandidate.js";  
+import PaidCandidate from "../models/PaidCandidate.js";
 import { generateJobID } from "../utils/generateJobId.js";
 
 dotenv.config();
@@ -47,9 +47,9 @@ function toPaise(amountOrPaise) {
   return Math.round(n * 100);
 }
 
-// Dummy signature verify
+// Dummy signature verify (temp)
 function verifyPhonePeSignature(req) {
-  return true; // testing
+  return true;
 }
 
 /* -----------------------------------------
@@ -83,9 +83,8 @@ router.post("/create-order", async (req, res) => {
     ).replace(/\/$/, "");
 
     const redirectUrl = `${frontBase}/payment-result?merchantOrderId=${merchantOrderId}`;
-    const callbackUrl = `${serverBase}/phonepe-callback`;
 
-    // Save order first
+    // Save order
     await Order.create({
       merchantOrderId,
       generatedJobId: merchantOrderId,
@@ -96,12 +95,11 @@ router.post("/create-order", async (req, res) => {
       paymentProviderData: { requestedAt: new Date(), title },
     });
 
-    // Build request
+    // Build request (NO callbackUrl)
     const builder = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantOrderId)
       .amount(paise)
-      .redirectUrl(redirectUrl)
-      .callbackUrl(callbackUrl);   // ⭐ FIXED — MUST HAVE THIS
+      .redirectUrl(redirectUrl);  // ONLY this supported
 
     if (title && typeof builder.orderNote === "function") {
       try { builder.orderNote(title); } catch {}
@@ -139,8 +137,9 @@ router.post("/create-order", async (req, res) => {
           "paymentProviderData.createResponse": response,
         }
       );
+
       return res.status(502).json({
-        error: "Failed to create checkout session",
+        error: "Invalid SDK response",
       });
     }
 
@@ -152,9 +151,9 @@ router.post("/create-order", async (req, res) => {
       }
     );
 
-    return res.status(201).json({ paymentUrl, merchantOrderId });
+    res.status(201).json({ paymentUrl, merchantOrderId });
   } catch (err) {
-    return res.status(500).json({
+    res.status(500).json({
       error: "Error creating order",
       details: err?.message,
     });
@@ -162,7 +161,7 @@ router.post("/create-order", async (req, res) => {
 });
 
 /* -----------------------------------------
-    PHONEPE CALLBACK HANDLER
+    PHONEPE CALLBACK HANDLER (WEBHOOK)
 ------------------------------------------ */
 router.post("/phonepe-callback", async (req, res) => {
   try {
@@ -234,7 +233,7 @@ router.post("/phonepe-callback", async (req, res) => {
     return res.status(200).json({ ok: true });
 
   } catch (err) {
-    return res.status(500).json({
+    res.status(500).json({
       error: "callback processing error",
       details: err?.message,
     });
@@ -242,6 +241,7 @@ router.post("/phonepe-callback", async (req, res) => {
 });
 
 export default router;
+
 
 
 
