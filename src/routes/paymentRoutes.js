@@ -53,7 +53,7 @@ function verifyPhonePeSignature(req) {
 }
 
 /* -----------------------------------------
-   CREATE ORDER
+   CREATE ORDER (UNCHANGED)
 ------------------------------------------ */
 router.post("/create-order", async (req, res) => {
   try {
@@ -84,7 +84,6 @@ router.post("/create-order", async (req, res) => {
 
     const redirectUrl = `${frontBase}/payment-result?merchantOrderId=${merchantOrderId}`;
 
-    // Save order
     await Order.create({
       merchantOrderId,
       generatedJobId: merchantOrderId,
@@ -95,11 +94,10 @@ router.post("/create-order", async (req, res) => {
       paymentProviderData: { requestedAt: new Date(), title },
     });
 
-    // Build request (NO callbackUrl)
     const builder = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantOrderId)
       .amount(paise)
-      .redirectUrl(redirectUrl);  // ONLY this supported
+      .redirectUrl(redirectUrl);
 
     if (title && typeof builder.orderNote === "function") {
       try { builder.orderNote(title); } catch {}
@@ -162,6 +160,7 @@ router.post("/create-order", async (req, res) => {
 
 /* -----------------------------------------
     PHONEPE CALLBACK HANDLER (WEBHOOK)
+    (KEPT AS FALLBACK)
 ------------------------------------------ */
 router.post("/phonepe-callback", async (req, res) => {
   try {
@@ -170,7 +169,6 @@ router.post("/phonepe-callback", async (req, res) => {
     }
 
     const payload = req.body ?? {};
-
     const merchantOrderId =
       payload.merchantOrderId ||
       payload.data?.merchantOrderId ||
@@ -192,14 +190,11 @@ router.post("/phonepe-callback", async (req, res) => {
 
     order.paymentProviderData.lastCallback = payload;
 
-    // SUCCESS CASE
     if (["SUCCESS", "COMPLETED", "PAID"].includes(status)) {
-      if (order.status !== "SUCCESS") {
-        order.status = "SUCCESS";
-        order.jobId = merchantOrderId;
-        order.generatedJobId = merchantOrderId;
-        await order.save();
-      }
+      order.status = "SUCCESS";
+      order.jobId = merchantOrderId;
+      order.generatedJobId = merchantOrderId;
+      await order.save();
 
       const candidate = order.userId
         ? await Candidate.findById(order.userId)
@@ -220,14 +215,12 @@ router.post("/phonepe-callback", async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    // FAILED CASE
     if (["FAILED", "DECLINED", "CANCELLED"].includes(status)) {
       order.status = "FAILED";
       await order.save();
       return res.status(200).json({ ok: true });
     }
 
-    // UNKNOWN → Keep pending
     order.status = "PENDING";
     await order.save();
     return res.status(200).json({ ok: true });
@@ -240,7 +233,306 @@ router.post("/phonepe-callback", async (req, res) => {
   }
 });
 
+/* -----------------------------------------
+    🔥 REAL TIME STATUS CHECK API
+    (THIS IS WHAT YOUR FRONTEND SHOULD CALL)
+------------------------------------------ */
+router.get("/status/:merchantOrderId", async (req, res) => {
+  try {
+    const { merchantOrderId } = req.params;
+
+    if (!client) {
+      return res.status(500).json({ error: "Payment provider not configured" });
+    }
+
+    const order = await Order.findOne({ merchantOrderId });
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Fetch real-time status from PhonePe
+    const providerResponse = await client.checkStatus(merchantOrderId);
+
+    const providerStatus =
+      providerResponse?.status ||
+      providerResponse?.data?.status ||
+      "PENDING";
+
+    const finalStatus = providerStatus.toUpperCase();
+
+    // Update DB based on response
+    if (["SUCCESS", "PAID", "COMPLETED"].includes(finalStatus)) {
+      order.status = "SUCCESS";
+    } else if (["FAILED", "CANCELLED", "DECLINED"].includes(finalStatus)) {
+      order.status = "FAILED";
+    } else {
+      order.status = "PENDING";
+    }
+
+    order.paymentProviderData.lastStatusCheck = providerResponse;
+    await order.save();
+
+    res.status(200).json({
+      merchantOrderId,
+      status: order.status,
+      providerStatus,
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: "Status check failed",
+      details: err.message,
+    });
+  }
+});
+
 export default router;
+
+
+
+// import express from "express";
+// import dotenv from "dotenv";
+// import {
+//   StandardCheckoutClient,
+//   Env,
+//   StandardCheckoutPayRequest,
+// } from "pg-sdk-node";
+// import Order from "../models/Order.js";
+// import Candidate from "../models/Candidate.js";
+// import PaidCandidate from "../models/PaidCandidate.js";
+// import { generateJobID } from "../utils/generateJobId.js";
+
+// dotenv.config();
+
+// const router = express.Router();
+
+// // Required envs
+// const clientID = process.env.CLIENT_ID;
+// const clientSecret = process.env.CLIENT_SECRET;
+// const clientVersion = 1;
+// const SDK_ENV =
+//   process.env.NODE_ENV === "production" ? Env.PRODUCTION : Env.SANDBOX;
+
+// // Initialize SDK client safely
+// let client = null;
+// try {
+//   if (clientID && clientSecret) {
+//     client = StandardCheckoutClient.getInstance(
+//       clientID,
+//       clientSecret,
+//       clientVersion,
+//       SDK_ENV
+//     );
+//   } else {
+//     console.warn("PhonePe SDK client not initialized.");
+//   }
+// } catch (e) {
+//   console.error("Failed to initialize PhonePe SDK:", e);
+//   client = null;
+// }
+
+// // Convert rupees → paise
+// function toPaise(amountOrPaise) {
+//   if (amountOrPaise === undefined || amountOrPaise === null) return null;
+//   const n = Number(amountOrPaise);
+//   if (!Number.isFinite(n) || n <= 0) return null;
+//   return Math.round(n * 100);
+// }
+
+// // Dummy signature verify (temp)
+// function verifyPhonePeSignature(req) {
+//   return true;
+// }
+
+// /* -----------------------------------------
+//    CREATE ORDER
+// ------------------------------------------ */
+// router.post("/create-order", async (req, res) => {
+//   try {
+//     const { amount, amountPaise, title } = req.body ?? {};
+
+//     if (!client) {
+//       return res.status(500).json({ error: "Payment provider not configured" });
+//     }
+
+//     let paise =
+//       amountPaise !== undefined && amountPaise !== null
+//         ? Number(amountPaise)
+//         : toPaise(amount);
+
+//     if (!paise) {
+//       return res.status(400).json({
+//         error: "Invalid amount (send rupees or paise)",
+//       });
+//     }
+
+//     const merchantOrderId = await generateJobID("KBTS");
+
+//     const frontBase = (process.env.FRONTEND_BASE || "http://localhost:5173").replace(/\/$/, "");
+//     const serverBase = (
+//       process.env.SERVER_BASE ||
+//       `http://localhost:${process.env.PORT || 5000}`
+//     ).replace(/\/$/, "");
+
+//     const redirectUrl = `${frontBase}/payment-result?merchantOrderId=${merchantOrderId}`;
+
+//     // Save order
+//     await Order.create({
+//       merchantOrderId,
+//       generatedJobId: merchantOrderId,
+//       jobId: null,
+//       userId: req.user?._id || null,
+//       amountPaise: paise,
+//       status: "CREATED",
+//       paymentProviderData: { requestedAt: new Date(), title },
+//     });
+
+//     // Build request (NO callbackUrl)
+//     const builder = StandardCheckoutPayRequest.builder()
+//       .merchantOrderId(merchantOrderId)
+//       .amount(paise)
+//       .redirectUrl(redirectUrl);  // ONLY this supported
+
+//     if (title && typeof builder.orderNote === "function") {
+//       try { builder.orderNote(title); } catch {}
+//     }
+
+//     const request = builder.build();
+
+//     let response;
+//     try {
+//       response = await client.pay(request);
+//     } catch (sdkErr) {
+//       await Order.findOneAndUpdate(
+//         { merchantOrderId },
+//         {
+//           status: "FAILED",
+//           "paymentProviderData.createError": sdkErr?.message,
+//         }
+//       );
+//       return res.status(502).json({
+//         error: "Payment provider error",
+//         details: sdkErr?.message,
+//       });
+//     }
+
+//     const paymentUrl =
+//       response?.redirectUrl ||
+//       response?.redirect_url ||
+//       response?.checkoutPageUrl;
+
+//     if (!paymentUrl) {
+//       await Order.findOneAndUpdate(
+//         { merchantOrderId },
+//         {
+//           status: "FAILED",
+//           "paymentProviderData.createResponse": response,
+//         }
+//       );
+
+//       return res.status(502).json({
+//         error: "Invalid SDK response",
+//       });
+//     }
+
+//     await Order.findOneAndUpdate(
+//       { merchantOrderId },
+//       {
+//         status: "PENDING",
+//         "paymentProviderData.createResponse": response,
+//       }
+//     );
+
+//     res.status(201).json({ paymentUrl, merchantOrderId });
+//   } catch (err) {
+//     res.status(500).json({
+//       error: "Error creating order",
+//       details: err?.message,
+//     });
+//   }
+// });
+
+// /* -----------------------------------------
+//     PHONEPE CALLBACK HANDLER (WEBHOOK)
+// ------------------------------------------ */
+// router.post("/phonepe-callback", async (req, res) => {
+//   try {
+//     if (!verifyPhonePeSignature(req)) {
+//       return res.status(400).json({ error: "invalid signature" });
+//     }
+
+//     const payload = req.body ?? {};
+
+//     const merchantOrderId =
+//       payload.merchantOrderId ||
+//       payload.data?.merchantOrderId ||
+//       payload.orderId;
+
+//     const status = (payload.status || payload.data?.status || "")
+//       .toString()
+//       .toUpperCase();
+
+//     if (!merchantOrderId) {
+//       return res.status(400).json({ error: "missing merchantOrderId" });
+//     }
+
+//     const order = await Order.findOne({ merchantOrderId });
+
+//     if (!order) {
+//       return res.status(404).json({ error: "order not found" });
+//     }
+
+//     order.paymentProviderData.lastCallback = payload;
+
+//     // SUCCESS CASE
+//     if (["SUCCESS", "COMPLETED", "PAID"].includes(status)) {
+//       if (order.status !== "SUCCESS") {
+//         order.status = "SUCCESS";
+//         order.jobId = merchantOrderId;
+//         order.generatedJobId = merchantOrderId;
+//         await order.save();
+//       }
+
+//       const candidate = order.userId
+//         ? await Candidate.findById(order.userId)
+//         : null;
+
+//       await PaidCandidate.create({
+//         candidateId: order.userId,
+//         name: candidate?.name,
+//         email: candidate?.email,
+//         contact: candidate?.contact,
+//         merchantOrderId,
+//         jobId: merchantOrderId,
+//         amountPaise: order.amountPaise,
+//         status: "SUCCESS",
+//         paidAt: new Date(),
+//       });
+
+//       return res.status(200).json({ ok: true });
+//     }
+
+//     // FAILED CASE
+//     if (["FAILED", "DECLINED", "CANCELLED"].includes(status)) {
+//       order.status = "FAILED";
+//       await order.save();
+//       return res.status(200).json({ ok: true });
+//     }
+
+//     // UNKNOWN → Keep pending
+//     order.status = "PENDING";
+//     await order.save();
+//     return res.status(200).json({ ok: true });
+
+//   } catch (err) {
+//     res.status(500).json({
+//       error: "callback processing error",
+//       details: err?.message,
+//     });
+//   }
+// });
+
+// export default router;
 
 
 
