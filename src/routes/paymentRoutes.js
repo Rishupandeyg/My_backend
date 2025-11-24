@@ -11,7 +11,6 @@ import {
 import Order from "../models/Order.js";
 import Candidate from "../models/Candidate.js";
 import PaidCandidate from "../models/PaidCandidate.js";
-
 import { generateJobID } from "../utils/generateJobId.js";
 
 dotenv.config();
@@ -20,7 +19,7 @@ const router = express.Router();
 
 
 // -----------------------------------------------------
-//  INITIALIZE PHONEPE CLIENT
+//  INIT PHONEPE CLIENT
 // -----------------------------------------------------
 
 const clientID = process.env.CLIENT_ID;
@@ -40,22 +39,24 @@ try {
       SDK_ENV
     );
   } else {
-    console.warn("⚠️ PhonePe client not initialized — missing env keys.");
+    console.warn("⚠️ PhonePe client not initialized — missing keys.");
   }
 } catch (err) {
   console.error("❌ PhonePe SDK init failed:", err);
 }
 
 
-// Utility: Convert rupees → paise
+// Helpers
 function toPaise(amount) {
   const n = Number(amount);
   if (!n || n <= 0) return null;
   return Math.round(n * 100);
 }
 
-// TEMP signature verify
-const verifyPhonePeSignature = (req) => true;
+const verifyPhonePeSignature = () => true;
+
+const safeName = (c) =>
+  `${c?.firstName || c?.name || ""} ${c?.lastName || ""}`.trim();
 
 
 
@@ -67,76 +68,42 @@ router.post("/create-order", async (req, res) => {
   try {
     const { amount, amountPaise, title } = req.body || {};
 
-    if (!client) {
-      return res.status(500).json({ error: "PhonePe not configured" });
-    }
-
-    let paise =
-      amountPaise !== undefined && amountPaise !== null
-        ? Number(amountPaise)
-        : toPaise(amount);
-
-    if (!paise) {
-      return res.status(400).json({ error: "Invalid amount" });
-    }
+    let paise = amountPaise ? Number(amountPaise) : toPaise(amount);
+    if (!paise) return res.status(400).json({ error: "Invalid amount" });
 
     const merchantOrderId = await generateJobID("KBTS");
 
-    const frontBase = (process.env.FRONTEND_BASE || "http://localhost:5173")
-      .replace(/\/$/, "");
+    const frontBase =
+      process.env.FRONTEND_BASE || "http://localhost:5173";
 
     const redirectUrl = `${frontBase}/payment-result?merchantOrderId=${merchantOrderId}`;
 
-    // Create local order
     await Order.create({
       merchantOrderId,
       userId: req.user?._id || null,
-      generatedJobId: merchantOrderId,
-      jobId: null,
       amountPaise: paise,
       status: "CREATED",
-      paymentProviderData: { requestedAt: new Date(), title },
+      generatedJobId: merchantOrderId,
+      paymentProviderData: { createdAt: new Date(), title },
     });
 
-    // Build request
     const builder = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantOrderId)
       .amount(paise)
       .redirectUrl(redirectUrl);
 
-    if (title && builder.orderNote) {
-      builder.orderNote(title);
-    }
+    if (title && builder.orderNote) builder.orderNote(title);
 
     const request = builder.build();
-
-    let response;
-
-    try {
-      response = await client.pay(request);
-    } catch (err) {
-      await Order.findOneAndUpdate(
-        { merchantOrderId },
-        {
-          status: "FAILED",
-          "paymentProviderData.createError": err.message,
-        }
-      );
-
-      return res.status(502).json({
-        error: "PhonePe request failed",
-        details: err.message,
-      });
-    }
+    const response = await client.pay(request);
 
     const paymentUrl =
       response?.redirectUrl ||
       response?.redirect_url ||
       response?.checkoutPageUrl;
 
-    if (!paymentUrl) {
+    if (!paymentUrl)
       return res.status(502).json({ error: "Invalid PhonePe response" });
-    }
 
     await Order.findOneAndUpdate(
       { merchantOrderId },
@@ -146,67 +113,48 @@ router.post("/create-order", async (req, res) => {
       }
     );
 
-    res.status(201).json({ paymentUrl, merchantOrderId });
+    return res.status(201).json({ paymentUrl, merchantOrderId });
   } catch (err) {
-    res.status(500).json({
-      error: "Error creating order",
-      details: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 });
 
 
 
 // -----------------------------------------------------
-//  WEBHOOK (FALLBACK)
+//  CALLBACK (FALLBACK ONLY)
 // -----------------------------------------------------
 
 router.post("/phonepe-callback", async (req, res) => {
   try {
-    if (!verifyPhonePeSignature(req)) {
+    if (!verifyPhonePeSignature(req))
       return res.status(400).json({ error: "Invalid signature" });
-    }
 
     const payload = req.body || {};
-
     const merchantOrderId =
       payload.merchantOrderId ||
       payload.data?.merchantOrderId ||
       payload.orderId;
 
-    if (!merchantOrderId) {
-      return res.status(400).json({ error: "Missing merchantOrderId" });
-    }
-
     const order = await Order.findOne({ merchantOrderId });
-    if (!order) {
+    if (!order)
       return res.status(404).json({ error: "Order not found" });
-    }
 
-    const status = (payload.status || payload.data?.status || "")
-      .toString()
-      .toUpperCase();
+    const status = (payload.status || payload.data?.status)?.toUpperCase();
 
-    // SUCCESS LOGIC
-    if (["SUCCESS", "PAID", "COMPLETED"].includes(status)) {
+    if (["SUCCESS", "COMPLETED", "PAID"].includes(status)) {
       order.status = "SUCCESS";
       order.jobId = merchantOrderId;
-      order.generatedJobId = merchantOrderId;
-
       await order.save();
 
-      const candidate = order.userId
-        ? await Candidate.findById(order.userId)
-        : null;
-
-      // Avoid duplicate entries
       const exists = await PaidCandidate.findOne({ merchantOrderId });
       if (!exists) {
+        const c = await Candidate.findById(order.userId);
         await PaidCandidate.create({
           userId: order.userId,
-          name: candidate?.firstName + " " + candidate?.lastName,
-          email: candidate?.email,
-          contact: candidate?.mobile,
+          name: safeName(c),
+          email: c?.email || "",
+          contact: c?.mobile || "",
           merchantOrderId,
           jobId: merchantOrderId,
           amountPaise: order.amountPaise,
@@ -218,71 +166,54 @@ router.post("/phonepe-callback", async (req, res) => {
       return res.json({ ok: true });
     }
 
-    // FAILED
     if (["FAILED", "CANCELLED", "DECLINED"].includes(status)) {
       order.status = "FAILED";
       await order.save();
       return res.json({ ok: true });
     }
 
-    // Still pending...
     order.status = "PENDING";
     await order.save();
-
     return res.json({ ok: true });
-
   } catch (err) {
-    res.status(500).json({ error: "Callback error", details: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
 
 
 // -----------------------------------------------------
-//  REAL-TIME STATUS CHECK (MAIN LOGIC)
+//  **REAL-TIME STATUS CHECK** (DOCS-CORRECT VERSION)
 // -----------------------------------------------------
 
 router.get("/status/:merchantOrderId", async (req, res) => {
   try {
     const { merchantOrderId } = req.params;
 
-    if (!client) {
-      return res.status(500).json({ error: "PhonePe not configured" });
-    }
-
     const order = await Order.findOne({ merchantOrderId });
-    if (!order) {
+    if (!order)
       return res.status(404).json({ error: "Order not found" });
-    }
 
-    // Check real-time status from PhonePe
-    const providerResponse = await client.checkStatus(merchantOrderId);
+    // OFFICIAL PHONEPE API — from docs
+    const providerResponse = await client.getOrderStatus(merchantOrderId);
 
-    const providerStatus =
-      providerResponse?.status ||
-      providerResponse?.data?.status ||
-      "PENDING";
+    console.log("PhonePe Order Status:", providerResponse);
 
-    const finalStatus = providerStatus.toUpperCase();
+    const finalStatus = providerResponse?.state?.toUpperCase() || "PENDING";
 
-    // SUCCESS LOGIC
-    if (["SUCCESS", "PAID", "COMPLETED"].includes(finalStatus)) {
+    if (finalStatus === "COMPLETED") {
       order.status = "SUCCESS";
       order.jobId = merchantOrderId;
-      order.generatedJobId = merchantOrderId;
 
-      // Create PaidCandidate if not exists
       const exists = await PaidCandidate.findOne({ merchantOrderId });
       if (!exists) {
-        const candidate = order.userId
-          ? await Candidate.findById(order.userId)
-          : null;
+        const c = await Candidate.findById(order.userId);
 
         await PaidCandidate.create({
           userId: order.userId,
-          name: candidate?.firstName + " " + candidate?.lastName,
-          email: candidate?.email,
-          contact: candidate?.mobile,
+          name: safeName(c),
+          email: c?.email || "",
+          contact: c?.mobile || "",
           merchantOrderId,
           jobId: merchantOrderId,
           amountPaise: order.amountPaise,
@@ -292,7 +223,7 @@ router.get("/status/:merchantOrderId", async (req, res) => {
       }
     }
 
-    else if (["FAILED", "CANCELLED", "DECLINED"].includes(finalStatus)) {
+    else if (finalStatus === "FAILED") {
       order.status = "FAILED";
     }
 
@@ -310,16 +241,13 @@ router.get("/status/:merchantOrderId", async (req, res) => {
     });
 
   } catch (err) {
-    return res.status(500).json({
-      error: "Status check error",
-      details: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 });
 
 
-
 export default router;
+
 
 
 // import express from "express";
