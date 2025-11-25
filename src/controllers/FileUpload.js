@@ -560,18 +560,27 @@ export const uploadFile = async (req, res) => {
     const User = normalizedType ? UserModels[normalizedType] : null;
     if (!User) return res.status(400).json({ error: "Invalid user type" });
 
-    if (!req.user?.id) return res.status(401).json({ error: "Unauthorized: User not found" });
+    if (!req.user?.id)
+      return res.status(401).json({ error: "Unauthorized: User not found" });
+
     if (!req.files || !req.files.file)
       return res.status(400).json({ error: "No file uploaded" });
 
     const file = req.files.file;
+    const originalExt =
+      file.name.includes(".") && file.name.split(".").length > 1
+        ? file.name.split(".").pop()
+        : null;
 
     const canonicalFileType = (fileType || "").toLowerCase();
 
-    // Map final file type
     const savedFileType = (() => {
       if (!canonicalFileType) return "document";
-      if (["photopost", "photo-post", "postphoto", "post-photo"].includes(canonicalFileType))
+      if (
+        ["photopost", "photo-post", "postphoto", "post-photo"].includes(
+          canonicalFileType
+        )
+      )
         return "photo";
       if (canonicalFileType === "resume") return "document";
       if (["photo", "document", "audio", "video"].includes(canonicalFileType))
@@ -579,25 +588,18 @@ export const uploadFile = async (req, res) => {
       return "document";
     })();
 
-    // -----------------------------
-    // FIX: Correct Cloudinary Resource Detection
-    // -----------------------------
+    // -------------------------------------
+    // FIX — Correct Cloudinary resource type
+    // -------------------------------------
     let resourceType = "auto";
 
-    // RAW for all application/* documents (PDF, DOCX, XLSX…)
     if (file.mimetype.startsWith("application/")) {
       resourceType = "raw";
-    }
-    // Videos
-    else if (file.mimetype.startsWith("video/")) {
+    } else if (file.mimetype.startsWith("video/")) {
       resourceType = "video";
-    }
-    // Audio (Cloudinary treats audio also as video)
-    else if (file.mimetype.startsWith("audio/")) {
+    } else if (file.mimetype.startsWith("audio/")) {
       resourceType = "video";
-    }
-    // Images
-    else if (file.mimetype.startsWith("image/")) {
+    } else if (file.mimetype.startsWith("image/")) {
       resourceType = "image";
     }
 
@@ -609,11 +611,21 @@ export const uploadFile = async (req, res) => {
       resource_type: resourceType,
     });
 
+    // Apply extension to RAW documents for opening
+    let finalUrl = result.secure_url;
+
+    if (file.mimetype.startsWith("application/") && originalExt) {
+      finalUrl = result.secure_url.replace(
+        "/upload/",
+        `/upload/fl_attachment:${file.name}/`
+      );
+    }
+
     // Fetch user
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ error: "User not found in DB" });
+    if (!user)
+      return res.status(404).json({ error: "User not found in database" });
 
-    // Map fields for photoUrl, videoUrl etc.
     const fieldMap = {
       photo: "photoUrl",
       resume: "resumeUrl",
@@ -622,66 +634,64 @@ export const uploadFile = async (req, res) => {
       video: "videoUrl",
     };
 
-    // Detect “POST” mode for photo-post
-    const isExplicitPostRoute = ["photopost", "photo-post"].includes(canonicalFileType);
+    const isExplicitPostRoute = ["photopost", "photo-post"].includes(
+      canonicalFileType
+    );
     const isPurposePost =
       req.body?.purpose === "post" || req.query?.purpose === "post";
+
     const treatAsPost = isExplicitPostRoute || isPurposePost;
 
-    // Update main fields (if not post upload)
+    // Main profile fields update (photo/video/audio)
     if (!treatAsPost && fieldMap[savedFileType]) {
-      user[fieldMap[savedFileType]] = result.secure_url;
+      user[fieldMap[savedFileType]] = finalUrl;
     }
 
-    // -----------------------------
-    // ⭐ FINAL FIX: SAVE TO GALLERY ⭐
-    // -----------------------------
+    // --------------------------------
+    // Gallery Save (FINAL FIX)
+    // --------------------------------
     if (normalizedType === "Candidate") {
       user.gallery = user.gallery || [];
 
       user.gallery.push({
         filename: result.public_id,
         originalName: file.name,
-        url: result.secure_url,
+        url: finalUrl,
         mimetype: file.mimetype,
         size: file.size,
         type: savedFileType,
       });
     }
 
-    // Save user
     await user.save();
 
-    // Log file in general FileUpload table
     const fileRecord = await FileUpload.create({
       userId: req.user.id,
       userType: normalizedType,
       fileType: savedFileType,
       originalName: file.name,
       fileName: result.public_id,
-      url: result.secure_url,
+      url: finalUrl,
       mimetype: file.mimetype,
       size: file.size,
     });
 
-    // Fresh user data
     const responseUser = await User.findById(req.user.id)
       .select("-password")
       .lean();
 
-    res.json({
+    return res.json({
       message: `${savedFileType} uploaded successfully`,
       file: fileRecord,
       user: responseUser,
       cloudinary: {
         public_id: result.public_id,
-        secure_url: result.secure_url,
+        secure_url: finalUrl,
       },
     });
-
   } catch (err) {
     console.error("File upload error:", err);
-    res.status(500).json({
+    return res.status(500).json({
       error: "File upload failed",
       details: err.message,
     });
