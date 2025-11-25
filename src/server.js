@@ -68,7 +68,7 @@ app.use((req, res, next) => {
 // file upload
 app.use(fileUpload({
   useTempFiles: true,
-  tempFileDir: "/tmp/",
+  tempFileDir: "./tmp/",
   createParentPath: true,
   limits: { fileSize: 50 * 1024 * 1024 },
 }));
