@@ -1,4 +1,5 @@
 // src/routes/paymentRoutes.js
+import auth from "../middlewares/auth.js";
 
 import express from "express";
 import dotenv from "dotenv";
