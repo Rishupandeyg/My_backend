@@ -247,141 +247,6 @@
 // };
 
 
-// // src/controllers/FileUpload.js
-// import cloudinary from "cloudinary";
-// import FileUpload from "../models/File.js";
-// import Candidate from "../models/Candidate.js";
-// import Employer from "../models/Employer.js";
-// import Admin from "../models/Admin.js";
-// import Gallery from "../models/Gallery.js";
-// import NewsAdmin from "../models/NewsAdmin.js";   // ✅ ADDED (ONLY THIS)
-
-// // Map of user models
-// const UserModels = { 
-//   Candidate, 
-//   Employer, 
-//   Admin,
-//   Newsadmin: NewsAdmin          // ✅ ADDED (ONLY THIS)
-// };
-
-// // Cloudinary config
-// cloudinary.v2.config({
-//   cloud_name: process.env.CLOUD_NAME,
-//   api_key: process.env.API_KEY,
-//   api_secret: process.env.API_SECRET,
-// });
-
-// export const uploadFile = async (req, res) => {
-//   try {
-//     let { userType, fileType } = req.params;
-
-//     const normalizedType = userType ? userType.charAt(0).toUpperCase() + userType.slice(1).toLowerCase() : null;
-//     const User = normalizedType ? UserModels[normalizedType] : null;
-//     if (!User) return res.status(400).json({ error: "Invalid user type" });
-
-//     if (!req.user?.id) return res.status(401).json({ error: "Unauthorized: User not found" });
-//     if (!req.files || !req.files.file) return res.status(400).json({ error: "No file uploaded" });
-
-//     const file = req.files.file;
-
-//     console.log("UPLOAD DEBUG:", {
-//       userId: req.user.id,
-//       role: req.user.role,
-//       params: req.params,
-//       fileName: file.name,
-//       body: req.body,
-//       query: req.query,
-//       purpose: req.body?.purpose || req.query?.purpose || null,
-//     });
-
-//     const canonicalFileType = (fileType || "").toLowerCase();
-
-//     const savedFileType = (() => {
-//       if (!canonicalFileType) return "document";
-//       if (["photopost", "photo-post", "postphoto", "post-photo"].includes(canonicalFileType)) return "photo";
-//       if (canonicalFileType === "resume") return "document";
-//       if (["photo", "document", "audio", "video"].includes(canonicalFileType)) return canonicalFileType;
-//       return "document";
-//     })();
-
-//     let resourceType = "auto";
-//     if (["document", "resume"].includes(canonicalFileType) || savedFileType === "document") resourceType = "raw";
-//     if (canonicalFileType === "audio" || canonicalFileType === "video" || savedFileType === "video") resourceType = "video";
-
-//     const folder = `${normalizedType.toLowerCase()}s`;
-
-//     const result = await cloudinary.v2.uploader.upload(file.tempFilePath, {
-//       folder,
-//       resource_type: resourceType,
-//     });
-
-//     const user = await User.findById(req.user.id);
-//     if (!user) return res.status(404).json({ error: "User not found in DB" });
-
-//     const fieldMap = {
-//       photo: "photoUrl",
-//       resume: "documentUrl",
-//       document: "documentUrl",
-//       audio: "audioUrl",
-//       video: "videoUrl",
-//     };
-
-//     const isExplicitPostRoute = canonicalFileType === "photopost" || canonicalFileType === "photo-post";
-//     const clientPurposeBody = req.body && req.body.purpose ? String(req.body.purpose).toLowerCase() : null;
-//     const clientPurposeQuery = req.query && req.query.purpose ? String(req.query.purpose).toLowerCase() : null;
-//     const isPurposePost = clientPurposeBody === "post" || clientPurposeBody === "feed" || clientPurposeQuery === "post" || clientPurposeQuery === "feed";
-//     const treatAsPost = isExplicitPostRoute || isPurposePost;
-
-//     if (!treatAsPost && fieldMap[savedFileType]) {
-//       user[fieldMap[savedFileType]] = result.secure_url;
-//       await user.save();
-//     }
-
-//     const galleryFileTypes = ["photo", "photopost", "photo-post", "video", "audio"];
-//     if (normalizedType === "Admin" && galleryFileTypes.includes(canonicalFileType || savedFileType)) {
-//       await Gallery.create({
-//         adminId: req.user.id,
-//         fileType: canonicalFileType || savedFileType,
-//         url: result.secure_url,
-//         public_id: result.public_id,
-//         originalName: file.name,
-//       });
-//     }
-
-//     const fileRecord = await FileUpload.create({
-//       userId: req.user.id,
-//       userType: normalizedType,
-//       fileType: savedFileType,
-//       originalName: file.name,
-//       fileName: result.public_id,
-//       url: result.secure_url,
-//       mimetype: file.mimetype || file.mimeType || null,
-//       size: file.size || null,
-//     });
-
-//     let responseUser = user.toObject ? user.toObject() : user;
-
-//     if (treatAsPost) {
-//       const fresh = await User.findById(req.user.id).lean();
-//       if (fresh) {
-//         responseUser.photoUrl = fresh.photoUrl || fresh.profilePic || responseUser.photoUrl;
-//         responseUser.profilePic = fresh.profilePic || fresh.photoUrl || responseUser.profilePic;
-//       }
-//     }
-
-//     res.json({
-//       message: `${canonicalFileType || savedFileType} uploaded successfully`,
-//       file: fileRecord,
-//       user: responseUser,
-//       cloudinary: { public_id: result.public_id, secure_url: result.secure_url },
-//     });
-//   } catch (err) {
-//     console.error("File upload error:", err);
-//     res.status(500).json({ error: "File upload failed", details: err.message });
-//   }
-// };
-
-
 // src/controllers/FileUpload.js
 import cloudinary from "cloudinary";
 import FileUpload from "../models/File.js";
@@ -389,13 +254,14 @@ import Candidate from "../models/Candidate.js";
 import Employer from "../models/Employer.js";
 import Admin from "../models/Admin.js";
 import Gallery from "../models/Gallery.js";
-import NewsAdmin from "../models/NewsAdmin.js";
+import NewsAdmin from "../models/NewsAdmin.js";   // ✅ ADDED (ONLY THIS)
 
-const UserModels = {
-  Candidate,
-  Employer,
+// Map of user models
+const UserModels = { 
+  Candidate, 
+  Employer, 
   Admin,
-  Newsadmin: NewsAdmin,
+  Newsadmin: NewsAdmin          // ✅ ADDED (ONLY THIS)
 };
 
 // Cloudinary config
@@ -409,42 +275,41 @@ export const uploadFile = async (req, res) => {
   try {
     let { userType, fileType } = req.params;
 
-    const normalizedType = userType
-      ? userType.charAt(0).toUpperCase() + userType.slice(1).toLowerCase()
-      : null;
-
+    const normalizedType = userType ? userType.charAt(0).toUpperCase() + userType.slice(1).toLowerCase() : null;
     const User = normalizedType ? UserModels[normalizedType] : null;
     if (!User) return res.status(400).json({ error: "Invalid user type" });
 
-    if (!req.user?.id) return res.status(401).json({ error: "Unauthorized: user not found" });
-
-    if (!req.files || !req.files.file)
-      return res.status(400).json({ error: "No file uploaded" });
+    if (!req.user?.id) return res.status(401).json({ error: "Unauthorized: User not found" });
+    if (!req.files || !req.files.file) return res.status(400).json({ error: "No file uploaded" });
 
     const file = req.files.file;
 
-    // ------------------------------
-    // AUTO TYPE DETECTION (image/pdf/video/audio)
-    // ------------------------------
-    let detectedType = "document";
+    console.log("UPLOAD DEBUG:", {
+      userId: req.user.id,
+      role: req.user.role,
+      params: req.params,
+      fileName: file.name,
+      body: req.body,
+      query: req.query,
+      purpose: req.body?.purpose || req.query?.purpose || null,
+    });
 
-    if (file.mimetype.startsWith("image/")) detectedType = "image";
-    if (file.mimetype === "application/pdf") detectedType = "pdf";
-    if (file.mimetype.startsWith("audio/")) detectedType = "audio";
-    if (file.mimetype.startsWith("video/")) detectedType = "video";
+    const canonicalFileType = (fileType || "").toLowerCase();
 
-    const canonicalFileType = fileType?.toLowerCase() || detectedType;
+    const savedFileType = (() => {
+      if (!canonicalFileType) return "document";
+      if (["photopost", "photo-post", "postphoto", "post-photo"].includes(canonicalFileType)) return "photo";
+      if (canonicalFileType === "resume") return "document";
+      if (["photo", "document", "audio", "video"].includes(canonicalFileType)) return canonicalFileType;
+      return "document";
+    })();
 
-    // Determine Cloudinary resource_type
     let resourceType = "auto";
-    if (canonicalFileType === "pdf") resourceType = "raw";
-    if (canonicalFileType === "audio" || canonicalFileType === "video")
-      resourceType = "video";
+    if (["document", "resume"].includes(canonicalFileType) || savedFileType === "document") resourceType = "raw";
+    if (canonicalFileType === "audio" || canonicalFileType === "video" || savedFileType === "video") resourceType = "video";
 
-    // Folder naming
     const folder = `${normalizedType.toLowerCase()}s`;
 
-    // Upload to Cloudinary
     const result = await cloudinary.v2.uploader.upload(file.tempFilePath, {
       folder,
       resource_type: resourceType,
@@ -453,73 +318,62 @@ export const uploadFile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: "User not found in DB" });
 
-    // ------------------------------
-    // SINGLE UPLOADS (photo/audio/video)
-    // ------------------------------
-    const singleUploadFields = {
+    const fieldMap = {
       photo: "photoUrl",
-      image: "photoUrl",   // profile-photo
+      resume: "documentUrl",
+      document: "documentUrl",
       audio: "audioUrl",
       video: "videoUrl",
     };
 
-    if (singleUploadFields[canonicalFileType]) {
-      user[singleUploadFields[canonicalFileType]] = result.secure_url;
+    const isExplicitPostRoute = canonicalFileType === "photopost" || canonicalFileType === "photo-post";
+    const clientPurposeBody = req.body && req.body.purpose ? String(req.body.purpose).toLowerCase() : null;
+    const clientPurposeQuery = req.query && req.query.purpose ? String(req.query.purpose).toLowerCase() : null;
+    const isPurposePost = clientPurposeBody === "post" || clientPurposeBody === "feed" || clientPurposeQuery === "post" || clientPurposeQuery === "feed";
+    const treatAsPost = isExplicitPostRoute || isPurposePost;
+
+    if (!treatAsPost && fieldMap[savedFileType]) {
+      user[fieldMap[savedFileType]] = result.secure_url;
       await user.save();
     }
 
-    // ------------------------------
-    // MULTIPLE UPLOADS => uploads[] array (images + pdf)
-    // ------------------------------
-    if (canonicalFileType === "image" || canonicalFileType === "pdf") {
-      user.uploads.push({
-        filename: result.public_id,
-        originalName: file.name,
-        url: result.secure_url,
-        mimetype: file.mimetype,
-        size: file.size,
-        type: canonicalFileType === "image" ? "image" : "pdf",
-      });
-
-      await user.save();
-    }
-
-    // ------------------------------
-    // Optional Gallery support (Admin only)
-    // ------------------------------
-    if (
-      normalizedType === "Admin" &&
-      ["image", "video"].includes(canonicalFileType)
-    ) {
+    const galleryFileTypes = ["photo", "photopost", "photo-post", "video", "audio"];
+    if (normalizedType === "Admin" && galleryFileTypes.includes(canonicalFileType || savedFileType)) {
       await Gallery.create({
         adminId: req.user.id,
-        fileType: canonicalFileType,
+        fileType: canonicalFileType || savedFileType,
         url: result.secure_url,
         public_id: result.public_id,
         originalName: file.name,
       });
     }
 
-    // FileUpload DB log
     const fileRecord = await FileUpload.create({
       userId: req.user.id,
       userType: normalizedType,
-      fileType: canonicalFileType,
+      fileType: savedFileType,
       originalName: file.name,
       fileName: result.public_id,
       url: result.secure_url,
-      mimetype: file.mimetype || null,
+      mimetype: file.mimetype || file.mimeType || null,
       size: file.size || null,
     });
 
+    let responseUser = user.toObject ? user.toObject() : user;
+
+    if (treatAsPost) {
+      const fresh = await User.findById(req.user.id).lean();
+      if (fresh) {
+        responseUser.photoUrl = fresh.photoUrl || fresh.profilePic || responseUser.photoUrl;
+        responseUser.profilePic = fresh.profilePic || fresh.photoUrl || responseUser.profilePic;
+      }
+    }
+
     res.json({
-      message: `${canonicalFileType} uploaded successfully`,
+      message: `${canonicalFileType || savedFileType} uploaded successfully`,
       file: fileRecord,
-      user,
-      cloudinary: {
-        public_id: result.public_id,
-        secure_url: result.secure_url,
-      },
+      user: responseUser,
+      cloudinary: { public_id: result.public_id, secure_url: result.secure_url },
     });
   } catch (err) {
     console.error("File upload error:", err);
