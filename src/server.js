@@ -13,7 +13,7 @@ import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import candidateRoutes from "./routes/candidateRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
-import uploadRoutes from "./routes/uploadRoutes.js";
+import uploadRoutes from "./routes/fileUpload.js";
 import paymentRoutes from "./routes/paymentroute.js";
 
 // Setup
