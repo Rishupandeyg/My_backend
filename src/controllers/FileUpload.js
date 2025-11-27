@@ -698,13 +698,240 @@
 //   }
 // };
 
+// // src/controllers/FileUpload.js
+// import cloudinary from "cloudinary";
+// import FileUpload from "../models/File.js";
+// import Candidate from "../models/Candidate.js";
+// import Employer from "../models/Employer.js";
+// import Admin from "../models/Admin.js";
+// import Gallery from "../models/Gallery.js";
+// import NewsAdmin from "../models/NewsAdmin.js";
+
+// // Map user models
+// const UserModels = {
+//   Candidate,
+//   Employer,
+//   Admin,
+//   Newsadmin: NewsAdmin,
+// };
+
+// // Cloudinary config
+// cloudinary.v2.config({
+//   cloud_name: process.env.CLOUD_NAME,
+//   api_key: process.env.API_KEY,
+//   api_secret: process.env.API_SECRET,
+// });
+
+// /**
+//  * NOTE:
+//  * If you need to debug a specific uploaded file from local disk for tooling,
+//  * use the path from the user's upload history (example below).
+//  *
+//  * Example uploaded local path (from conversation history):
+//  * /mnt/data/byehhqltbeasvs6pa0pd
+//  *
+//  * The tool that serves/validates files will convert that local path to an accessible URL.
+//  */
+
+// export const uploadFile = async (req, res) => {
+//   try {
+//     let { userType, fileType } = req.params;
+
+//     const normalizedType = userType
+//       ? userType.charAt(0).toUpperCase() + userType.slice(1).toLowerCase()
+//       : null;
+
+//     const User = normalizedType ? UserModels[normalizedType] : null;
+//     if (!User) return res.status(400).json({ error: "Invalid user type" });
+
+//     if (!req.user?.id)
+//       return res.status(401).json({ error: "Unauthorized: User not found" });
+
+//     if (!req.files || !req.files.file)
+//       return res.status(400).json({ error: "No file uploaded" });
+
+//     const file = req.files.file;
+
+//     // Ensure tempFilePath exists (some upload middlewares set this)
+//     if (!file.tempFilePath && !file.path && !file.mv) {
+//       // fallback: some libs provide buffer - if so, write to tmp and upload
+//       return res.status(400).json({ error: "Uploaded file missing temp path" });
+//     }
+
+//     const originalName = file.name || file.originalname || "file";
+//     const originalExt =
+//       originalName && originalName.includes(".")
+//         ? originalName.split(".").pop()
+//         : null;
+
+//     const canonicalFileType = (fileType || "").toLowerCase();
+
+//     const savedFileType = (() => {
+//       if (!canonicalFileType) return "document";
+//       if (
+//         ["photopost", "photo-post", "postphoto", "post-photo"].includes(
+//           canonicalFileType
+//         )
+//       )
+//         return "photo";
+//       if (canonicalFileType === "resume") return "document";
+//       if (["photo", "document", "audio", "video"].includes(canonicalFileType))
+//         return canonicalFileType;
+//       return "document";
+//     })();
+
+//     // -----------------------------
+//     // Robust Cloudinary resource type detection
+//     // -----------------------------
+//     let resourceType = "auto";
+//     const mimetype = file.mimetype || file.mimeType || "";
+
+//     if (mimetype.startsWith("application/")) {
+//       resourceType = "raw";
+//     } else if (mimetype.startsWith("video/")) {
+//       resourceType = "video";
+//     } else if (mimetype.startsWith("audio/")) {
+//       // Cloudinary uses 'video' resource_type for audio as well
+//       resourceType = "video";
+//     } else if (mimetype.startsWith("image/")) {
+//       resourceType = "image";
+//     }
+
+//     const folder = `${normalizedType.toLowerCase()}s`;
+
+//     // Upload options: keep resource_type explicit to avoid Cloudinary guessing
+//     const uploadOptions = {
+//       folder,
+//       resource_type: resourceType,
+//       use_filename: false,
+//       unique_filename: true,
+//       overwrite: false,
+//     };
+
+//     // Some setups pass buffer (req.files.file.data). If so, use upload_stream.
+//     let result;
+//     if (file.tempFilePath) {
+//       result = await cloudinary.v2.uploader.upload(file.tempFilePath, uploadOptions);
+//     } else if (file.path) {
+//       result = await cloudinary.v2.uploader.upload(file.path, uploadOptions);
+//     } else if (file.data) {
+//       // fallback using upload_stream
+//       result = await new Promise((resolve, reject) => {
+//         const stream = cloudinary.v2.uploader.upload_stream(
+//           uploadOptions,
+//           (err, resu) => {
+//             if (err) return reject(err);
+//             resolve(resu);
+//           }
+//         );
+//         stream.end(file.data);
+//       });
+//     } else {
+//       // If none available, fail gracefully
+//       return res.status(400).json({ error: "Unable to read uploaded file content" });
+//     }
+
+//     // -----------------------------
+//     // Ensure returned URL opens correctly for RAW docs:
+//     // Use fl_attachment:<filename> transform to force proper content-disposition and extension
+//     // -----------------------------
+//     let finalUrl = result.secure_url;
+//     if (resourceType === "raw" && originalExt) {
+//       // Insert fl_attachment with filename into the URL path so Cloudinary serves correct headers
+//       // Example replacement: /upload/  ->  /upload/fl_attachment:resume.pdf/
+//       // Keep existing transformations if any (result.secure_url already contains /upload/...).
+//       finalUrl = result.secure_url.replace(
+//         "/upload/",
+//         `/upload/fl_attachment:${encodeURIComponent(originalName)}/`
+//       );
+//     }
+
+//     // Fetch user document
+//     const user = await User.findById(req.user.id);
+//     if (!user)
+//       return res.status(404).json({ error: "User not found in database" });
+
+//     const fieldMap = {
+//       photo: "photoUrl",
+//       resume: "resumeUrl",
+//       document: "resumeUrl",
+//       audio: "audioUrl",
+//       video: "videoUrl",
+//     };
+
+//     // Detect "post" intent (treat as feed/post rather than profile override)
+//     const isExplicitPostRoute = ["photopost", "photo-post"].includes(canonicalFileType);
+//     const isPurposePost =
+//       (req.body && String(req.body.purpose).toLowerCase() === "post") ||
+//       (req.query && String(req.query.purpose).toLowerCase() === "post");
+
+//     const treatAsPost = isExplicitPostRoute || isPurposePost;
+
+//     // Update profile-level fields (photoUrl, videoUrl...) only if not posting to feed
+//     if (!treatAsPost && fieldMap[savedFileType]) {
+//       user[fieldMap[savedFileType]] = finalUrl;
+//     }
+
+//     // -----------------------------
+//     // Save to candidate.gallery (guaranteed)
+//     // -----------------------------
+//     if (normalizedType === "Candidate") {
+//       user.gallery = user.gallery || [];
+//       user.gallery.push({
+//         filename: result.public_id,
+//         originalName,
+//         url: finalUrl,
+//         mimetype,
+//         size: file.size || null,
+//         type: savedFileType,
+//         uploadedAt: new Date(),
+//       });
+//     }
+
+//     // Persist user changes
+//     await user.save();
+
+//     // Log file record (audit)
+//     const fileRecord = await FileUpload.create({
+//       userId: req.user.id,
+//       userType: normalizedType,
+//       fileType: savedFileType,
+//       originalName,
+//       fileName: result.public_id,
+//       url: finalUrl,
+//       mimetype,
+//       size: file.size || null,
+//     });
+
+//     // Return fresh user (without password) and file info
+//     const responseUser = await User.findById(req.user.id).select("-password").lean();
+
+//     return res.json({
+//       message: `${savedFileType} uploaded successfully`,
+//       file: fileRecord,
+//       user: responseUser,
+//       cloudinary: {
+//         public_id: result.public_id,
+//         secure_url: finalUrl,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("File upload error:", err);
+//     return res.status(500).json({
+//       error: "File upload failed",
+//       details: err.message,
+//     });
+//   }
+// };
+
+
+
 // src/controllers/FileUpload.js
 import cloudinary from "cloudinary";
 import FileUpload from "../models/File.js";
 import Candidate from "../models/Candidate.js";
 import Employer from "../models/Employer.js";
 import Admin from "../models/Admin.js";
-import Gallery from "../models/Gallery.js";
 import NewsAdmin from "../models/NewsAdmin.js";
 
 // Map user models
@@ -721,17 +948,6 @@ cloudinary.v2.config({
   api_key: process.env.API_KEY,
   api_secret: process.env.API_SECRET,
 });
-
-/**
- * NOTE:
- * If you need to debug a specific uploaded file from local disk for tooling,
- * use the path from the user's upload history (example below).
- *
- * Example uploaded local path (from conversation history):
- * /mnt/data/byehhqltbeasvs6pa0pd
- *
- * The tool that serves/validates files will convert that local path to an accessible URL.
- */
 
 export const uploadFile = async (req, res) => {
   try {
@@ -752,146 +968,94 @@ export const uploadFile = async (req, res) => {
 
     const file = req.files.file;
 
-    // Ensure tempFilePath exists (some upload middlewares set this)
-    if (!file.tempFilePath && !file.path && !file.mv) {
-      // fallback: some libs provide buffer - if so, write to tmp and upload
-      return res.status(400).json({ error: "Uploaded file missing temp path" });
-    }
-
     const originalName = file.name || file.originalname || "file";
-    const originalExt =
-      originalName && originalName.includes(".")
-        ? originalName.split(".").pop()
-        : null;
-
     const canonicalFileType = (fileType || "").toLowerCase();
 
+    // Clean fileType mapping
     const savedFileType = (() => {
-      if (!canonicalFileType) return "document";
-      if (
-        ["photopost", "photo-post", "postphoto", "post-photo"].includes(
-          canonicalFileType
-        )
-      )
+      if (["photo", "photopost", "photo-post"].includes(canonicalFileType))
         return "photo";
-      if (canonicalFileType === "resume") return "document";
-      if (["photo", "document", "audio", "video"].includes(canonicalFileType))
-        return canonicalFileType;
-      return "document";
+      if (canonicalFileType === "audio") return "audio";
+      if (canonicalFileType === "video") return "video";
+      return "document"; // default
     })();
 
-    // -----------------------------
-    // Robust Cloudinary resource type detection
-    // -----------------------------
-    let resourceType = "auto";
-    const mimetype = file.mimetype || file.mimeType || "";
-
-    if (mimetype.startsWith("application/")) {
-      resourceType = "raw";
-    } else if (mimetype.startsWith("video/")) {
-      resourceType = "video";
-    } else if (mimetype.startsWith("audio/")) {
-      // Cloudinary uses 'video' resource_type for audio as well
-      resourceType = "video";
-    } else if (mimetype.startsWith("image/")) {
+    // 👍 CLEAN + STABLE RESOURCE TYPE DETECTION
+    let resourceType;
+    if (file.mimetype.startsWith("image/")) {
       resourceType = "image";
+    } else if (file.mimetype.startsWith("video/")) {
+      resourceType = "video";
+    } else {
+      resourceType = "raw"; // PDFs, DOCX, PPTX, ZIP, CSV etc
     }
 
     const folder = `${normalizedType.toLowerCase()}s`;
 
-    // Upload options: keep resource_type explicit to avoid Cloudinary guessing
     const uploadOptions = {
       folder,
       resource_type: resourceType,
-      use_filename: false,
       unique_filename: true,
       overwrite: false,
     };
 
-    // Some setups pass buffer (req.files.file.data). If so, use upload_stream.
+    // 🟢 Upload file
     let result;
     if (file.tempFilePath) {
       result = await cloudinary.v2.uploader.upload(file.tempFilePath, uploadOptions);
     } else if (file.path) {
       result = await cloudinary.v2.uploader.upload(file.path, uploadOptions);
     } else if (file.data) {
-      // fallback using upload_stream
       result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.v2.uploader.upload_stream(
-          uploadOptions,
-          (err, resu) => {
-            if (err) return reject(err);
-            resolve(resu);
-          }
-        );
-        stream.end(file.data);
+        cloudinary.v2.uploader.upload_stream(uploadOptions, (err, res) => {
+          if (err) return reject(err);
+          resolve(res);
+        }).end(file.data);
       });
     } else {
-      // If none available, fail gracefully
-      return res.status(400).json({ error: "Unable to read uploaded file content" });
+      return res.status(400).json({ error: "Unable to read uploaded file" });
     }
 
-    // -----------------------------
-    // Ensure returned URL opens correctly for RAW docs:
-    // Use fl_attachment:<filename> transform to force proper content-disposition and extension
-    // -----------------------------
-    let finalUrl = result.secure_url;
-    if (resourceType === "raw" && originalExt) {
-      // Insert fl_attachment with filename into the URL path so Cloudinary serves correct headers
-      // Example replacement: /upload/  ->  /upload/fl_attachment:resume.pdf/
-      // Keep existing transformations if any (result.secure_url already contains /upload/...).
-      finalUrl = result.secure_url.replace(
-        "/upload/",
-        `/upload/fl_attachment:${encodeURIComponent(originalName)}/`
-      );
-    }
+    const finalUrl = result.secure_url; // No transformation — CLEAN & SAFE
 
-    // Fetch user document
+    // 🟢 Fetch user to update
     const user = await User.findById(req.user.id);
     if (!user)
       return res.status(404).json({ error: "User not found in database" });
 
     const fieldMap = {
       photo: "photoUrl",
-      resume: "resumeUrl",
-      document: "resumeUrl",
-      audio: "audioUrl",
       video: "videoUrl",
+      audio: "audioUrl",
+      document: "resumeUrl",
     };
 
-    // Detect "post" intent (treat as feed/post rather than profile override)
-    const isExplicitPostRoute = ["photopost", "photo-post"].includes(canonicalFileType);
-    const isPurposePost =
-      (req.body && String(req.body.purpose).toLowerCase() === "post") ||
-      (req.query && String(req.query.purpose).toLowerCase() === "post");
+    const isPost =
+      ["photopost", "photo-post"].includes(canonicalFileType) ||
+      (req.body?.purpose?.toLowerCase() === "post");
 
-    const treatAsPost = isExplicitPostRoute || isPurposePost;
-
-    // Update profile-level fields (photoUrl, videoUrl...) only if not posting to feed
-    if (!treatAsPost && fieldMap[savedFileType]) {
+    // Update profile field only if not post purpose
+    if (!isPost && fieldMap[savedFileType]) {
       user[fieldMap[savedFileType]] = finalUrl;
     }
 
-    // -----------------------------
-    // Save to candidate.gallery (guaranteed)
-    // -----------------------------
+    // 🟢 Save to gallery (Candidate only)
     if (normalizedType === "Candidate") {
       user.gallery = user.gallery || [];
       user.gallery.push({
         filename: result.public_id,
         originalName,
         url: finalUrl,
-        mimetype,
+        mimetype: file.mimetype,
         size: file.size || null,
         type: savedFileType,
         uploadedAt: new Date(),
       });
     }
 
-    // Persist user changes
     await user.save();
 
-    // Log file record (audit)
+    // Log in uploads collection
     const fileRecord = await FileUpload.create({
       userId: req.user.id,
       userType: normalizedType,
@@ -899,12 +1063,11 @@ export const uploadFile = async (req, res) => {
       originalName,
       fileName: result.public_id,
       url: finalUrl,
-      mimetype,
+      mimetype: file.mimetype,
       size: file.size || null,
     });
 
-    // Return fresh user (without password) and file info
-    const responseUser = await User.findById(req.user.id).select("-password").lean();
+    const responseUser = await User.findById(req.user.id).select("-password");
 
     return res.json({
       message: `${savedFileType} uploaded successfully`,
@@ -917,10 +1080,9 @@ export const uploadFile = async (req, res) => {
     });
   } catch (err) {
     console.error("File upload error:", err);
-    return res.status(500).json({
+    res.status(500).json({
       error: "File upload failed",
       details: err.message,
     });
   }
 };
-
