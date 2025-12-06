@@ -12,7 +12,7 @@ import adminRoutes from "./routes/adminRoutes.js";
 import candidateRoutes from "./routes/candidateRoutes.js";
 import employerRoutes from "./routes/employerRoutes.js";
 import jobRoutes from "./routes/jobs.js";
-import uploadRoutes from "./routes/fileUpload.js";          // ✅ CORRECT
+import uploadRoutes from "./routes/fileUpload.js";         
 import galleryRoutes from "./routes/galleryRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import adminJobRoutes from "./routes/adminJobRoutes.js";

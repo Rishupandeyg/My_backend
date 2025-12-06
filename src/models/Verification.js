@@ -1,33 +1,33 @@
-// src/models/Verification.js
-import mongoose from "mongoose";
+// // src/models/Verification.js
+// import mongoose from "mongoose";
 
-const VerificationSchema = new mongoose.Schema(
-  {
-    verificationId: { type: String, required: true, unique: true },
+// const VerificationSchema = new mongoose.Schema(
+//   {
+//     verificationId: { type: String, required: true, unique: true },
 
-    // Email-only OTP
-    type: { 
-      type: String, 
-      enum: ["email"],    // only email allowed now
-      required: true 
-    },
+//     // Email-only OTP
+//     type: { 
+//       type: String, 
+//       enum: ["email"],    // only email allowed now
+//       required: true 
+//     },
 
-    value: { type: String, required: true }, // email
+//     value: { type: String, required: true }, // email
 
-    otp: { type: String, required: true }, // hashed OTP
+//     otp: { type: String, required: true }, // hashed OTP
 
-    expiresAt: { type: Date, required: true },  // TTL control
+//     expiresAt: { type: Date, required: true },  // TTL control
 
-    attempts: { type: Number, default: 0 },
+//     attempts: { type: Number, default: 0 },
 
-    used: { type: Boolean, default: false },
-  },
-  { timestamps: true }
-);
+//     used: { type: Boolean, default: false },
+//   },
+//   { timestamps: true }
+// );
 
-// TTL index — document auto-deletes after expiry
-VerificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// // TTL index — document auto-deletes after expiry
+// VerificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-const Verification = mongoose.model("Verification", VerificationSchema);
+// const Verification = mongoose.model("Verification", VerificationSchema);
 
-export default Verification;
+// export default Verification;
