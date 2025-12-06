@@ -568,9 +568,9 @@ import { v4 as uuidv4 } from "uuid";
 import Candidate from "../models/Candidate.js";
 import Employer from "../models/Employer.js";
 import Admin from "../models/Admin.js";
-import Verification from "../models/Verification.js";
-import { generateOTP } from "../utils/otp.js";
-import { sendEmailOTP } from "../utils/sendOTP.js"; // should send an email with OTP
+//import Verification from "../models/Verification.js";
+//import { generateOTP } from "../utils/otp.js";
+//import { sendEmailOTP } from "../utils/sendOTP.js"; // should send an email with OTP
 
 const router = express.Router();
 
@@ -582,29 +582,29 @@ const generateToken = (user, role) => {
 };
 
 // Helper: create verification record and send otp (email-only)
-async function createVerificationRecord({ value }) {
-  if (!value) throw new Error("Email value required for verification");
+// async function createVerificationRecord({ value }) {
+//   if (!value) throw new Error("Email value required for verification");
 
-  const otp = generateOTP(); // e.g. returns 6-digit number string
-  const hashedOtp = await bcrypt.hash(String(otp), 10);
-  const verificationId = uuidv4();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+//   const otp = generateOTP(); // e.g. returns 6-digit number string
+//   const hashedOtp = await bcrypt.hash(String(otp), 10);
+//   const verificationId = uuidv4();
+//   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  const ver = await Verification.create({
-    verificationId,
-    type: "email",
-    value,
-    otp: hashedOtp,
-    expiresAt,
-    attempts: 0,
-    used: false,
-  });
+//   const ver = await Verification.create({
+//     verificationId,
+//     type: "email",
+//     value,
+//     otp: hashedOtp,
+//     expiresAt,
+//     attempts: 0,
+//     used: false,
+//   });
 
   // Attempt to send email (may throw)
-  await sendEmailOTP(value, otp);
+//   await sendEmailOTP(value, otp);
 
-  return verificationId;
-}
+//   return verificationId;
+// }
 
 // -------------------------
 // Candidate Registration
