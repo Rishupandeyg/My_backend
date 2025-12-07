@@ -70,7 +70,7 @@
 //     const job = await AdminJob.findById(req.params.id);
 //     if (!job) return res.status(404).json({ message: "Job not found" });
 
-//     // 🧠 Optional: verify that the logged-in admin posted this job
+//     //  Optional: verify that the logged-in admin posted this job
 //     if (job.postedBy.toString() !== req.user.id) {
 //       return res.status(403).json({ message: "You can update only your own job posts" });
 //     }
