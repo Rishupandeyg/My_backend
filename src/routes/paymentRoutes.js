@@ -191,30 +191,38 @@ router.post("/phonepe-callback", async (req, res) => {
 // -----------------------------------------------------
 // REAL-TIME STATUS CHECK (MAIN SYSTEM)
 // -----------------------------------------------------
-
 router.get("/status/:merchantOrderId", async (req, res) => {
   try {
     const { merchantOrderId } = req.params;
 
     const order = await Order.findOne({ merchantOrderId });
-    if (!order)
+    if (!order) {
       return res.status(404).json({ error: "Order not found" });
+    }
 
     const providerResponse = await client.getOrderStatus(merchantOrderId);
 
-    console.log("PhonePe Order Status:", providerResponse);
+    console.log("✅ RAW PHONEPE RESPONSE:", JSON.stringify(providerResponse, null, 2));
 
-    const finalStatus = providerResponse?.state?.toUpperCase() || "PENDING";
+    // ✅ SAFELY EXTRACT STATUS FROM ANY FORMAT
+    const rawStatus =
+      providerResponse?.state ||
+      providerResponse?.status ||
+      providerResponse?.data?.state ||
+      providerResponse?.data?.status ||
+      "PENDING";
 
-    if (finalStatus === "COMPLETED") {
+    const finalStatus = rawStatus.toUpperCase();
+
+    if (["COMPLETED", "SUCCESS", "PAID"].includes(finalStatus)) {
       order.status = "SUCCESS";
       order.jobId = merchantOrderId;
 
-      // ✅ MARK USER AS PAID (SAFE)
+      // ✅ MARK USER AS PAID
       await Candidate.findByIdAndUpdate(order.userId, {
         isPaid: true,
         paidAt: new Date(),
-        paidOrderId: merchantOrderId
+        paidOrderId: merchantOrderId,
       });
 
       const exists = await PaidCandidate.findOne({ merchantOrderId });
@@ -232,9 +240,11 @@ router.get("/status/:merchantOrderId", async (req, res) => {
           status: "SUCCESS",
           paidAt: new Date(),
         });
+
+        console.log("✅ PAID CANDIDATE CREATED");
       }
     }
-    else if (finalStatus === "FAILED") {
+    else if (["FAILED", "CANCELLED", "DECLINED"].includes(finalStatus)) {
       order.status = "FAILED";
     }
     else {
@@ -252,10 +262,11 @@ router.get("/status/:merchantOrderId", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("STATUS CHECK ERROR:", err);
+    console.error("❌ STATUS API ERROR:", err);
     return res.status(500).json({ error: err.message });
   }
 });
+
 
 export default router;
 
