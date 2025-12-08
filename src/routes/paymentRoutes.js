@@ -147,6 +147,13 @@ router.post("/phonepe-callback", async (req, res) => {
       order.status = "SUCCESS";
       order.jobId = merchantOrderId;
       await order.save();
+      // ✅ MARK USER AS PAID
+await Candidate.findByIdAndUpdate(order.userId, {
+  isPaid: true,
+  paidAt: new Date(),
+  paidOrderId: merchantOrderId
+});
+
 
       const exists = await PaidCandidate.findOne({ merchantOrderId });
       if (!exists) {
@@ -205,6 +212,14 @@ router.get("/status/:merchantOrderId", async (req, res) => {
     if (finalStatus === "COMPLETED") {
       order.status = "SUCCESS";
       order.jobId = merchantOrderId;
+      // ✅ MARK USER AS PAID
+await Candidate.findByIdAndUpdate(order.userId, {
+  isPaid: true,
+  paidAt: new Date(),
+  paidOrderId: merchantOrderId
+});
+
+
 
       const exists = await PaidCandidate.findOne({ merchantOrderId });
       if (!exists) {
