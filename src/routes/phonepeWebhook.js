@@ -13,7 +13,7 @@ router.post("/", async (req, res) => {
     const payload = req.body.toString();
 
     const expected = crypto
-      .createHmac("sha256", process.env.WEBHOOK_SECRET)
+      .createHmac("sha256", process.env.CLIENT_SECRET)
       .update(payload)
       .digest("hex");
 
