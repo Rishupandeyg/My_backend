@@ -16,5 +16,7 @@ export async function generateJobID(prefix = "KBTS") {
   // Start from 101
   const currentNumber = counter.seq + 100;
 
-  return `${prefix}-${currentNumber}`;
+  // return `${prefix}-${currentNumber}`;
+   return `${prefix}${Date.now()}${currentNumber}`;
+
 }
