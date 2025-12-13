@@ -20,6 +20,10 @@ import jobCategoryRoutes from "./routes/jobCategoryRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import newsAdminRoutes from "./routes/newsAdminRoutes.js";
 import newsRoutes from "./routes/newsRoutes.js";
+import phonepeWebhook from "./routes/phonepeWebhook.js";
+
+
+
 
 import createAdmin from "./config/adminSetup.js";
 import fileUpload from "express-fileupload";
@@ -53,6 +57,13 @@ app.use(
     credentials: true,
   })
 );
+
+app.use(
+  "/api/webhooks/phonepe",
+  express.raw({ type: "*/*" })
+);
+app.use("/api/webhooks/phonepe", phonepeWebhook);
+
 
 // ------------------------------------------------------
 // 2) BODY PARSER FIX
@@ -150,6 +161,7 @@ mongoose
   .then(async () => {
     console.log("MongoDB connected");
     try {
+
       await createAdmin();
     } catch (e) {
       console.warn("createAdmin failed:", e?.message);
@@ -165,6 +177,7 @@ mongoose
   });
 
 export default app;
+
 
 
 // // backend/src/server.js
