@@ -8,56 +8,55 @@ const router = express.Router();
 
 /**
  * PHONEPE WEBHOOK
- * URL: /api/webhooks/phonepe
- * Method: POST
+ * POST /api/webhooks/phonepe
  */
 router.post("/", async (req, res) => {
   try {
     /* --------------------------------------------------
-       1️⃣ RAW BODY & SIGNATURE
+       1️⃣ AUTHORIZATION VERIFY (PHONEPE WAY)
     -------------------------------------------------- */
 
-    const signature = req.headers["x-verify"];
-    if (!signature) {
-      return res.status(400).json({ error: "Missing signature header" });
+    const receivedAuth = req.headers["authorization"];
+    if (!receivedAuth) {
+      return res.status(400).json({ error: "Missing Authorization header" });
     }
 
-    // raw body REQUIRED
-    const rawBody = req.body.toString("utf8");
+    const username = process.env.PHONEPE_WEBHOOK_USERNAME;
+    const password = process.env.PHONEPE_WEBHOOK_PASSWORD;
 
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.PHONEPE_WEBHOOK_SECRET)
-      .update(rawBody)
+    const expectedAuth = crypto
+      .createHash("sha256")
+      .update(`${username}:${password}`)
       .digest("hex");
 
-    if (signature !== expectedSignature) {
-      console.error("❌ Webhook signature mismatch");
-      return res.status(401).json({ error: "Invalid webhook signature" });
+    if (receivedAuth !== expectedAuth) {
+      console.error("❌ PhonePe webhook auth failed");
+      return res.status(401).json({ error: "Unauthorized webhook" });
     }
 
     /* --------------------------------------------------
-       2️⃣ PARSE PAYLOAD
+       2️⃣ PARSE BODY (NO SIGNATURE ON BODY)
     -------------------------------------------------- */
 
-    const payload = JSON.parse(rawBody);
+    const payload =
+      typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body;
 
     const merchantOrderId =
       payload?.data?.merchantOrderId ||
-      payload?.merchantOrderId ||
-      payload?.orderId;
+      payload?.merchantOrderId;
 
     if (!merchantOrderId) {
       return res.status(400).json({ error: "merchantOrderId missing" });
     }
 
-    const rawStatus =
+    const status =
       payload?.data?.state ||
-      payload?.data?.status ||
       payload?.state ||
-      payload?.status ||
       "PENDING";
 
-    const finalStatus = rawStatus.toUpperCase();
+    const finalStatus = status.toUpperCase();
 
     /* --------------------------------------------------
        3️⃣ FETCH ORDER
@@ -69,32 +68,29 @@ router.post("/", async (req, res) => {
     }
 
     /* --------------------------------------------------
-       4️⃣ IDEMPOTENCY (VERY IMPORTANT)
+       4️⃣ IDEMPOTENCY
     -------------------------------------------------- */
 
     if (["SUCCESS", "FAILED"].includes(order.status)) {
-      // Already processed → acknowledge silently
       return res.json({ ok: true });
     }
 
     /* --------------------------------------------------
-       5️⃣ SUCCESS CASE
+       5️⃣ SUCCESS
     -------------------------------------------------- */
 
-    if (["SUCCESS", "COMPLETED", "PAID"].includes(finalStatus)) {
+    if (finalStatus === "COMPLETED") {
       order.status = "SUCCESS";
       order.paymentProvider = "PHONEPE";
       order.paidAt = new Date();
       await order.save();
 
-      // Mark candidate paid
       await Candidate.findByIdAndUpdate(order.userId, {
         isPaid: true,
         paidAt: new Date(),
         paidOrderId: merchantOrderId,
       });
 
-      // Create PaidCandidate ONLY ONCE
       await PaidCandidate.updateOne(
         { merchantOrderId },
         {
@@ -113,16 +109,16 @@ router.post("/", async (req, res) => {
     }
 
     /* --------------------------------------------------
-       6️⃣ FAILURE CASE
+       6️⃣ FAILURE
     -------------------------------------------------- */
 
-    else if (["FAILED", "CANCELLED", "DECLINED"].includes(finalStatus)) {
+    else if (["FAILED", "CANCELLED"].includes(finalStatus)) {
       order.status = "FAILED";
       await order.save();
     }
 
     /* --------------------------------------------------
-       7️⃣ ACKNOWLEDGE WEBHOOK
+       7️⃣ ACK
     -------------------------------------------------- */
 
     return res.json({ ok: true });
