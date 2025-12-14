@@ -6,80 +6,67 @@ import PaidCandidate from "../models/PaidCandidate.js";
 
 const router = express.Router();
 
-/**
- * PHONEPE WEBHOOK
- * POST /api/webhooks/phonepe
- */
 router.post("/", async (req, res) => {
   try {
-    /* --------------------------------------------------
-       1️⃣ AUTHORIZATION VERIFY (PHONEPE WAY)
-    -------------------------------------------------- */
+    /* ---------------- AUTH ---------------- */
 
     const receivedAuth = req.headers["authorization"];
     if (!receivedAuth) {
       return res.status(400).json({ error: "Missing Authorization header" });
     }
 
-    const username = process.env.PHONEPE_WEBHOOK_USERNAME;
-    const password = process.env.PHONEPE_WEBHOOK_PASSWORD;
-
     const expectedAuth = crypto
       .createHash("sha256")
-      .update(`${username}:${password}`)
+      .update(
+        `${process.env.PHONEPE_WEBHOOK_USERNAME}:${process.env.PHONEPE_WEBHOOK_PASSWORD}`
+      )
       .digest("hex");
 
-    if (receivedAuth !== expectedAuth) {
-      console.error("❌ PhonePe webhook auth failed");
+    const normalizedReceived = receivedAuth.trim().toLowerCase();
+    const normalizedExpected = expectedAuth.toLowerCase();
+
+    if (normalizedReceived !== normalizedExpected) {
+      console.error("❌ Webhook auth mismatch");
       return res.status(401).json({ error: "Unauthorized webhook" });
     }
 
-    /* --------------------------------------------------
-       2️⃣ PARSE BODY (NO SIGNATURE ON BODY)
-    -------------------------------------------------- */
+    /* ---------------- PAYLOAD ---------------- */
 
-    const payload =
-      typeof req.body === "string"
-        ? JSON.parse(req.body)
-        : req.body;
+    const body = typeof req.body === "string"
+      ? JSON.parse(req.body)
+      : req.body;
 
-    const merchantOrderId =
-      payload?.data?.merchantOrderId ||
-      payload?.merchantOrderId;
+    const { event, payload } = body || {};
 
-    if (!merchantOrderId) {
-      return res.status(400).json({ error: "merchantOrderId missing" });
+    if (!event || !payload) {
+      return res.status(400).json({ error: "Invalid webhook payload" });
     }
 
-    const status =
-      payload?.data?.state ||
-      payload?.state ||
-      "PENDING";
+    const merchantOrderId = payload.merchantOrderId;
+    const state = payload.state;
 
-    const finalStatus = status.toUpperCase();
+    if (!merchantOrderId || !state) {
+      return res.status(400).json({ error: "Missing order data" });
+    }
 
-    /* --------------------------------------------------
-       3️⃣ FETCH ORDER
-    -------------------------------------------------- */
+    /* ---------------- ORDER ---------------- */
 
     const order = await Order.findOne({ merchantOrderId });
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    /* --------------------------------------------------
-       4️⃣ IDEMPOTENCY
-    -------------------------------------------------- */
-
+    // Idempotency
     if (["SUCCESS", "FAILED"].includes(order.status)) {
       return res.json({ ok: true });
     }
 
-    /* --------------------------------------------------
-       5️⃣ SUCCESS
-    -------------------------------------------------- */
+    /* ---------------- EVENTS ---------------- */
 
-    if (finalStatus === "COMPLETED") {
+    if (
+      event === "checkout.order.completed" &&
+      state === "COMPLETED"
+    ) {
       order.status = "SUCCESS";
       order.paymentProvider = "PHONEPE";
       order.paidAt = new Date();
@@ -108,18 +95,17 @@ router.post("/", async (req, res) => {
       );
     }
 
-    /* --------------------------------------------------
-       6️⃣ FAILURE
-    -------------------------------------------------- */
-
-    else if (["FAILED", "CANCELLED"].includes(finalStatus)) {
+    else if (
+      event === "checkout.order.failed" &&
+      state === "FAILED"
+    ) {
       order.status = "FAILED";
       await order.save();
     }
 
-    /* --------------------------------------------------
-       7️⃣ ACK
-    -------------------------------------------------- */
+    // Refund events can be handled later
+    // pg.refund.completed
+    // pg.refund.failed
 
     return res.json({ ok: true });
 
