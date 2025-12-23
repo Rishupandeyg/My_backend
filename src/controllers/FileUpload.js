@@ -933,6 +933,8 @@ import Candidate from "../models/Candidate.js";
 import Employer from "../models/Employer.js";
 import Admin from "../models/Admin.js";
 import NewsAdmin from "../models/NewsAdmin.js";
+import Gallery from "../models/Gallery.js";
+
 
 // Map user models
 const UserModels = {
@@ -1066,6 +1068,16 @@ export const uploadFile = async (req, res) => {
       mimetype: file.mimetype,
       size: file.size || null,
     });
+    // 🔥 ALSO SAVE TO PUBLIC GALLERY FOR ADMIN UPLOADS
+if (normalizedType === "Admin") {
+  await Gallery.create({
+    url: finalUrl,
+    public_id: result.public_id,
+    fileType: savedFileType, // photo | video | audio
+    uploadedBy: req.user.id,
+  });
+}
+
 
     const responseUser = await User.findById(req.user.id).select("-password");
 

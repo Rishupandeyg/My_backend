@@ -1,4 +1,3 @@
-// 
 import { v2 as cloudinary } from "cloudinary";
 
 export const cloudinaryConnect = () => {
@@ -9,5 +8,4 @@ export const cloudinaryConnect = () => {
   });
 };
 
-// ✅ Named export so we can use cloudinary.uploader.destroy etc.
 export { cloudinary };
